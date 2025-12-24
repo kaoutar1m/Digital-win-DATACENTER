@@ -1,0 +1,1 @@
+{"version":3,"file":"Sensor.d.ts","sourceRoot":"","sources":["../../src/models/Sensor.ts"],"names":[],"mappings":"AAAA,MAAM,WAAW,MAAM;IACrB,EAAE,EAAE,MAAM,CAAC;IACX,OAAO,EAAE,MAAM,CAAC;IAChB,IAAI,EAAE,MAAM,CAAC;IACb,KAAK,CAAC,EAAE,MAAM,CAAC;IACf,SAAS,CAAC,EAAE,MAAM,CAAC;IACnB,KAAK,EAAE,OAAO,CAAC;IACf,YAAY,EAAE,IAAI,CAAC;CACpB"}
