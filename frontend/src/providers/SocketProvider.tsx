@@ -17,7 +17,7 @@ export const SocketProvider = ({ children }: { children: React.ReactNode }) => {
 
   useEffect(() => {
     // Assurez-vous que l'URL correspond à votre configuration proxy
-    const newSocket = io('http://localhost:3001', {
+    const newSocket = io('http://localhost:4000', {
       transports: ['websocket', 'polling'],
       reconnectionAttempts: 5,
       reconnectionDelay: 1000,
