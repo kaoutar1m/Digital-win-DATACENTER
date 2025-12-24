@@ -1,4 +1,4 @@
-import React, { useMemo, useRef } from 'react';
+import React, { useMemo, useRef, useState, useEffect, Suspense } from 'react';
 import * as THREE from 'three';
 import { useGLTF } from '@react-three/drei';
 import { useFrame } from '@react-three/fiber';
@@ -7,28 +7,52 @@ import BackupGenerator from './BackupGenerator';
 const DataCenterGenerator = () => {
   const sceneRef = useRef<THREE.Group>(null);
 
-  // Charger votre building principal
-  const { scene: buildingScene } = useGLTF('/models/building/exterior.glb');
+  // Vérifier que le fichier GLB existe avant de charger
+  const [buildingAvailable, setBuildingAvailable] = useState<boolean | null>(null);
 
-  // Créer un data center complet programmatiquement
+  useEffect(() => {
+  let cancelled = false;
+
+  (async () => {
+    try {
+      const resp = await fetch("/models/building/exterior.glb", { method: "HEAD" });
+      if (cancelled) return;
+
+      if (!resp.ok) {
+        setBuildingAvailable(false);
+        return;
+      }
+
+      const len = resp.headers.get("content-length");
+      if (len !== null && Number(len) === 0) {
+        setBuildingAvailable(false);
+        return;
+      }
+
+      setBuildingAvailable(true);
+    } catch {
+      if (!cancelled) setBuildingAvailable(false);
+    }
+  })();
+
+  return () => {
+    cancelled = true;
+  };
+}, []);
+
+
+  // Créer un data center complet programmatiquement (le modèle du bâtiment
+  // est rendu séparément par <BuildingModel /> pour respecter les Hooks)
   const dataCenter = useMemo(() => {
     const group = new THREE.Group();
 
-    // 1. Bâtiment principal (votre modèle)
-    const building = buildingScene.clone();
-    building.position.set(0, 0, 0);
-
-    // Fix emissiveIntensity for materials that support it
-    building.traverse((child) => {
-      if (child instanceof THREE.Mesh && child.material) {
-        const material = child.material as THREE.MeshStandardMaterial;
-        if (material instanceof THREE.MeshStandardMaterial && 'emissiveIntensity' in material) {
-          material.emissiveIntensity = 0.1;
-        }
-      }
-    });
-
-    group.add(building);
+    // Placeholder pour le bâtiment principal — le vrai modèle est ajouté
+    // par le composant BuildingModel pour éviter d'appeler des hooks
+    // conditionnellement.
+    const buildingPlaceholder = new THREE.Group();
+    buildingPlaceholder.name = 'building-placeholder';
+    buildingPlaceholder.position.set(0, 0, 0);
+    group.add(buildingPlaceholder);
 
     // 2. Sécurité périmétrique
     group.add(createPerimeterSecurity());
@@ -46,7 +70,7 @@ const DataCenterGenerator = () => {
     group.add(createSecuritySystems());
 
     return group;
-  }, [buildingScene]);
+  }, []);
 
   useFrame((state) => {
     // Animations subtiles
@@ -71,9 +95,33 @@ const DataCenterGenerator = () => {
   return (
     <group ref={sceneRef}>
       <primitive object={dataCenter} />
+      {buildingAvailable && (
+        <Suspense fallback={null}>
+          <BuildingModel />
+        </Suspense>
+      )}
       <BackupGenerator position={[-40, 0, 25] as [number, number, number]} isActive={true} />
     </group>
   );
+};
+
+// Composant enfant pour charger le GLB (respecte les Hooks)
+const BuildingModel: React.FC = () => {
+  const { scene } = useGLTF('/models/building/exterior.glb') as any;
+  const ref = useRef<THREE.Group>(null);
+
+  useEffect(() => {
+    if (ref.current && scene) {
+      try {
+        ref.current.add(scene.clone());
+      } catch (e) {
+        // ignore
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scene]);
+
+  return <group ref={ref} position={[0, 0, 0]} />;
 };
 
 // ==================== FONCTIONS DE GÉNÉRATION ====================
