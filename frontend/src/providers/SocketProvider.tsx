@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useState } from 'react';
 import { io, Socket } from 'socket.io-client';
 
 interface SocketContextType {
@@ -11,36 +11,43 @@ const SocketContext = createContext<SocketContextType>({
   isConnected: false,
 });
 
-export const SocketProvider = ({ children }: { children: React.ReactNode }) => {
+export const useSocket = () => {
+  const context = useContext(SocketContext);
+  if (!context) {
+    throw new Error('useSocket must be used within a SocketProvider');
+  }
+  return context;
+};
+
+interface SocketProviderProps {
+  children: React.ReactNode;
+}
+
+export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
   const [socket, setSocket] = useState<Socket | null>(null);
   const [isConnected, setIsConnected] = useState(false);
 
   useEffect(() => {
-    // Assurez-vous que l'URL correspond à votre configuration proxy
-    const newSocket = io('http://localhost:4000', {
+    // Connect to the backend socket server
+    const socketInstance = io('http://localhost:3001', {
       transports: ['websocket', 'polling'],
-      reconnectionAttempts: 5,
-      reconnectionDelay: 1000,
     });
 
-    newSocket.on('connect', () => {
-      console.log('Connecté au serveur Socket.io');
+    socketInstance.on('connect', () => {
+      console.log('Connected to socket server');
       setIsConnected(true);
     });
 
-    newSocket.on('disconnect', () => {
-      console.log('Déconnecté du serveur Socket.io');
+    socketInstance.on('disconnect', () => {
+      console.log('Disconnected from socket server');
       setIsConnected(false);
     });
 
-    newSocket.on('connect_error', (error) => {
-      console.error('Erreur de connexion Socket.io:', error);
-    });
+    setSocket(socketInstance);
 
-    setSocket(newSocket);
-
+    // Cleanup on unmount
     return () => {
-      newSocket.disconnect();
+      socketInstance.disconnect();
     };
   }, []);
 
@@ -50,5 +57,3 @@ export const SocketProvider = ({ children }: { children: React.ReactNode }) => {
     </SocketContext.Provider>
   );
 };
-
-export const useSocket = () => useContext(SocketContext);

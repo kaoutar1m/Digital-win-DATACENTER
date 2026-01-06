@@ -38,7 +38,7 @@ const AlertVisualization: React.FC<AlertVisualizationProps> = ({ alert }) => {
       </mesh>
 
       {/* Floating icon */}
-      <Html center>
+      <Html center occlude>
         <div className="alert-icon bg-white rounded-full p-2 shadow-lg">
           <FaExclamationTriangle
             size={24}

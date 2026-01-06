@@ -1,4 +1,4 @@
-import { pool } from '../database/connection';
+import pool from '../services/database';
 
 // Define TypeScript interfaces
 export interface Sensor {

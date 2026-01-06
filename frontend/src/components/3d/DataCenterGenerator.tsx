@@ -1,1057 +1,1225 @@
-import React, { useMemo, useRef, useState, useEffect, Suspense } from 'react';
+import React, { useMemo, useRef, useEffect } from 'react';
 import * as THREE from 'three';
-import { useGLTF } from '@react-three/drei';
 import { useFrame } from '@react-three/fiber';
-import BackupGenerator from './BackupGenerator';
+import { Text } from '@react-three/drei';
 
-const DataCenterGenerator = () => {
+/* ------------------------------------------------------------------ */
+/*  DATA-CENTER HAUTE SÉCURITÉ – ZONES CRITIQUES                     */
+/*  1. Zone Réception/Accueil (Publique)                             */
+/*  2. Zone Technique (Critique) – Racks serveurs                    */
+/*  3. Zone de Stockage (Haute densité)                              */
+/*  4. Zone Réseau & Communication                                   */
+/*  5. Zone de Sécurité & Contrôle                                    */
+/*  6. Zone de Maintenance                                           */
+/* ------------------------------------------------------------------ */
+
+const DataCenterGenerator: React.FC<{
+  onObjectClick?: (event: THREE.Event) => void;
+}> = ({ onObjectClick }) => {
+
   const sceneRef = useRef<THREE.Group>(null);
+  const pointLightsRef = useRef<THREE.PointLight[]>([]);
 
-  // Vérifier que le fichier GLB existe avant de charger
-  const [buildingAvailable, setBuildingAvailable] = useState<boolean | null>(null);
+  const zones = [
+    { id: 'reception', name: 'ACCUEIL / RÉCEPTION', color: '#3498db', pos: [-35, 0, -25] as [number, number, number], icon: '👥' },
+    { id: 'technique', name: 'SALLE TECHNIQUE', color: '#e74c3c', pos: [35, 0, -25] as [number, number, number], icon: '⚙️' },
+    { id: 'stockage', name: 'STOCKAGE HAUTE DENSITÉ', color: '#2ecc71', pos: [-35, 0, 25] as [number, number, number], icon: '💾' },
+    { id: 'reseau', name: 'CENTRE RÉSEAU', color: '#9b59b6', pos: [35, 0, 25] as [number, number, number], icon: '🌐' },
+    { id: 'securite', name: 'SALLE DE CONTRÔLE', color: '#f39c12', pos: [0, 0, -45] as [number, number, number], icon: '🛡️' },
+    { id: 'maintenance', name: 'MAINTENANCE', color: '#95a5a6', pos: [0, 0, 45] as [number, number, number], icon: '🔧' }
+  ];
 
-  useEffect(() => {
-  let cancelled = false;
-
-  (async () => {
-    try {
-      const resp = await fetch("/models/building/exterior.glb", { method: "HEAD" });
-      if (cancelled) return;
-
-      if (!resp.ok) {
-        setBuildingAvailable(false);
-        return;
-      }
-
-      const len = resp.headers.get("content-length");
-      if (len !== null && Number(len) === 0) {
-        setBuildingAvailable(false);
-        return;
-      }
-
-      setBuildingAvailable(true);
-    } catch {
-      if (!cancelled) setBuildingAvailable(false);
-    }
-  })();
-
-  return () => {
-    cancelled = true;
-  };
-}, []);
-
-
-  // Créer un data center complet programmatiquement (le modèle du bâtiment
-  // est rendu séparément par <BuildingModel /> pour respecter les Hooks)
   const dataCenter = useMemo(() => {
-    const group = new THREE.Group();
+    const g = new THREE.Group();
 
-    // Placeholder pour le bâtiment principal — le vrai modèle est ajouté
-    // par le composant BuildingModel pour éviter d'appeler des hooks
-    // conditionnellement.
-    const buildingPlaceholder = new THREE.Group();
-    buildingPlaceholder.name = 'building-placeholder';
-    buildingPlaceholder.position.set(0, 0, 0);
-    group.add(buildingPlaceholder);
+    /* 1. BÂTIMENT PRINCIPAL avec architecture moderne */
+    g.add(createMainBuilding());
 
-    // 2. Sécurité périmétrique
-    group.add(createPerimeterSecurity());
+    /* 2. ZONES FONCTIONNELLES */
+    zones.forEach(z => g.add(createZone(z)));
 
-    // 3. Zones intérieures
-    group.add(createInteriorZones());
+    /* 3. SÉCURITÉ PÉRIMÉTRIQUE */
+    g.add(createSecurityPerimeter());
 
-    // 4. Infrastructure technique
-    group.add(createTechnicalInfrastructure());
+    /* 4. INFRASTRUCTURES EXTÉRIEURES */
+    g.add(createExternalInfrastructure());
 
-    // 5. Salles serveurs
-    group.add(createServerRooms());
+    /* 5. ÉLÉMENTS DE SÉCURITÉ AVANCÉS */
+    g.add(createAdvancedSecurity());
 
-    // 6. Systèmes de sécurité
-    group.add(createSecuritySystems());
+    /* 6. VÉHICULES ET ÉQUIPEMENTS */
+    g.add(createVehiclesAndEquipment());
 
-    return group;
+    return g;
   }, []);
 
-  useFrame((state) => {
-    // Animations subtiles
-    if (sceneRef.current) {
-        // Pulsation des LEDs de sécurité
-        sceneRef.current.traverse((child) => {
-          if (child instanceof THREE.Mesh && child.userData?.isSecurityLED) {
-            const intensity = Math.sin(state.clock.elapsedTime * 3) * 0.5 + 0.5;
-            if (child.material instanceof THREE.MeshStandardMaterial && 'emissive' in child.material) {
-              child.material.emissiveIntensity = intensity;
-            }
-          }
+  /* ANIMATIONS */
+  useFrame(({ clock }) => {
+    if (!sceneRef.current) return;
+    
+    // Animation des LED
+    sceneRef.current.traverse((child: any) => {
+      if (child.userData?.led) {
+        const intensity = Math.sin(clock.elapsedTime * 3 + child.userData.phase) * 0.4 + 0.6;
+        child.material.emissiveIntensity = intensity;
+      }
+      if (child.userData?.fan) {
+        child.rotation.y += 0.1;
+      }
+      if (child.userData?.camera) {
+        child.rotation.y = Math.sin(clock.elapsedTime * 0.5) * 0.5;
+      }
+      if (child.userData?.patrol) {
+        child.position.x = Math.sin(clock.elapsedTime * 0.3) * 20;
+      }
+    });
 
-          // Rotation des caméras PTZ
-          if (child instanceof THREE.Object3D && child.userData?.isPTZCamera) {
-            child.rotation.y = Math.sin(state.clock.elapsedTime * 0.5) * 0.5;
-          }
-        });
-    }
+    // Animation des lumières d'urgence
+    pointLightsRef.current.forEach((light, index) => {
+      if (light.userData?.emergency) {
+        light.intensity = Math.sin(clock.elapsedTime * 10 + index) * 2 + 3;
+      }
+    });
   });
 
   return (
-    <group ref={sceneRef}>
+    <group ref={sceneRef} onClick={onObjectClick}>
       <primitive object={dataCenter} />
-      {buildingAvailable && (
-        <Suspense fallback={null}>
-          <BuildingModel />
-        </Suspense>
+      
+      {/* Textes 3D pour les zones */}
+      <Text
+        position={[-35, 14, -25]}
+        rotation={[0, 0, 0]}
+        fontSize={1.2}
+        color={zones[0].color}
+        anchorX="center"
+        anchorY="middle"
+        font="https://fonts.gstatic.com/s/roboto/v30/KFOmCnqEu92Fr1Me5WZLCzYlKw.ttf"
+      >
+        {zones[0].icon} ACCUEIL
+      </Text>
+      
+      <Text
+        position={[35, 14, -25]}
+        rotation={[0, 0, 0]}
+        fontSize={1.2}
+        color={zones[1].color}
+        anchorX="center"
+        anchorY="middle"
+        font="https://fonts.gstatic.com/s/roboto/v30/KFOmCnqEu92Fr1Me5WZLCzYlKw.ttf"
+      >
+        {zones[1].icon} TECHNIQUE
+      </Text>
+      
+      <Text
+        position={[-35, 14, 25]}
+        rotation={[0, 0, 0]}
+        fontSize={1.2}
+        color={zones[2].color}
+        anchorX="center"
+        anchorY="middle"
+        font="https://fonts.gstatic.com/s/roboto/v30/KFOmCnqEu92Fr1Me5WZLCzYlKw.ttf"
+      >
+        {zones[2].icon} STOCKAGE
+      </Text>
+      
+      <Text
+        position={[35, 14, 25]}
+        rotation={[0, 0, 0]}
+        fontSize={1.2}
+        color={zones[3].color}
+        anchorX="center"
+        anchorY="middle"
+        font="https://fonts.gstatic.com/s/roboto/v30/KFOmCnqEu92Fr1Me5WZLCzYlKw.ttf"
+      >
+        {zones[3].icon} RÉSEAU
+      </Text>
+      
+      <Text
+        position={[0, 14, -45]}
+        rotation={[0, 0, 0]}
+        fontSize={1.2}
+        color={zones[4].color}
+        anchorX="center"
+        anchorY="middle"
+        font="https://fonts.gstatic.com/s/roboto/v30/KFOmCnqEu92Fr1Me5WZLCzYlKw.ttf"
+      >
+        {zones[4].icon} CONTRÔLE
+      </Text>
+      
+      <Text
+        position={[0, 14, 45]}
+        rotation={[0, 0, 0]}
+        fontSize={1.2}
+        color={zones[5].color}
+        anchorX="center"
+        anchorY="middle"
+        font="https://fonts.gstatic.com/s/roboto/v30/KFOmCnqEu92Fr1Me5WZLCzYlKw.ttf"
+      >
+        {zones[5].icon} MAINTENANCE
+      </Text>
+      
+      {/* Titre principal du data center */}
+      <Text
+        position={[0, 35, 0]}
+        rotation={[0, 0, 0]}
+        fontSize={2.5}
+        color="#ffffff"
+        anchorX="center"
+        anchorY="middle"
+        font="https://fonts.gstatic.com/s/roboto/v30/KFOmCnqEu92Fr1Me5WZLCzYlKw.ttf"
+        outlineWidth={0.1}
+        outlineColor="#000000"
+      >
+        DATA CENTER HAUTE SÉCURITÉ
+      </Text>
+      
+      <Text
+        position={[0, 32, 0]}
+        rotation={[0, 0, 0]}
+        fontSize={1}
+        color="#00ff00"
+        anchorX="center"
+        anchorY="middle"
+        font="https://fonts.gstatic.com/s/roboto/v30/KFOmCnqEu92Fr1Me5WZLCzYlKw.ttf"
+      >
+        🟢 SYSTÈME OPÉRATIONNEL
+      </Text>
+      
+      {/* Éclairage avancé */}
+      <ambientLight intensity={0.3} />
+      <directionalLight 
+        position={[100, 200, 100]} 
+        intensity={1.2} 
+        castShadow
+        shadow-mapSize-width={2048}
+        shadow-mapSize-height={2048}
+      />
+      <hemisphereLight color="#87ceeb" groundColor="#1a202c" intensity={0.5} />
+      
+      {/* Lumières de sécurité */}
+      {[-60, 0, 60].map(x => 
+        [-60, 0, 60].map(z => (
+          <pointLight
+            key={`${x}-${z}`}
+            position={[x, 25, z]}
+            color="#ffffff"
+            intensity={0.8}
+            distance={50}
+            decay={2}
+          />
+        ))
       )}
-      <BackupGenerator position={[-40, 0, 25] as [number, number, number]} isActive={true} />
     </group>
   );
 };
 
-// Composant enfant pour charger le GLB (respecte les Hooks)
-const BuildingModel: React.FC = () => {
-  const { scene } = useGLTF('/models/building/exterior.glb') as any;
-  const ref = useRef<THREE.Group>(null);
+/* ------------------------------------------------------------- */
+/* 1. BÂTIMENT PRINCIPAL – Architecture haute sécurité           */
+/* ------------------------------------------------------------- */
+const createMainBuilding = () => {
+  const grp = new THREE.Group();
 
-  useEffect(() => {
-    if (ref.current && scene) {
-      try {
-        ref.current.add(scene.clone());
-      } catch (e) {
-        // ignore
-      }
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [scene]);
+  /* Structure principale en béton armé */
+  const structure = new THREE.Mesh(
+    new THREE.BoxGeometry(120, 25, 80),
+    new THREE.MeshPhysicalMaterial({
+      color: '#4a5568',
+      roughness: 0.7,
+      metalness: 0.3,
+      reflectivity: 0.5
+    })
+  );
+  structure.position.y = 12.5;
+  structure.castShadow = true;
+  structure.receiveShadow = true;
+  structure.userData = {
+    type: 'building',
+    buildingType: 'main_structure',
+    buildingId: 'main-building',
+    status: 'operational',
+    capacity: '10000 sqm'
+  };
+  grp.add(structure);
 
-  return <group ref={ref} position={[0, 0, 0]} />;
-};
-
-// ==================== FONCTIONS DE GÉNÉRATION ====================
-
-// 1. SÉCURITÉ PÉRIMÉTRIQUE
-const createPerimeterSecurity = () => {
-  const group = new THREE.Group();
-  group.name = 'perimeter-security';
-
-  // Clôture de sécurité
-  const fenceGeometry = new THREE.BoxGeometry(100, 3, 2);
-  const fenceMaterial = new THREE.MeshStandardMaterial({
-    color: '#2d3748',
-    metalness: 0.8,
-    roughness: 0.4
-  });
-
-  // Clôture autour du bâtiment
-  const positions = [
-    [-51, 1.5, 0], [51, 1.5, 0],  // Nord/Sud
-    [0, 1.5, -41], [0, 1.5, 41]   // Est/Ouest
-  ];
-
-  positions.forEach((pos, i) => {
-    const fence = new THREE.Mesh(fenceGeometry, fenceMaterial);
-    fence.position.set(pos[0], pos[1], pos[2]);
-    fence.rotation.y = i < 2 ? 0 : Math.PI / 2;
-    fence.castShadow = true;
-    group.add(fence);
-  });
-
-  // Portails d'accès
-  const gateGeometry = new THREE.BoxGeometry(4, 3, 0.2);
-  const gateMaterial = new THREE.MeshStandardMaterial({
-    color: '#1a365d',
-    metalness: 0.9,
-    roughness: 0.2
-  });
-
-  const mainGate = new THREE.Mesh(gateGeometry, gateMaterial);
-  mainGate.position.set(0, 1.5, 41);
-  mainGate.userData = { type: 'security-gate', isInteractive: true };
-  group.add(mainGate);
-
-  // Bornes de sécurité
-  const bollardGeometry = new THREE.CylinderGeometry(0.3, 0.3, 1, 8);
-  const bollardMaterial = new THREE.MeshStandardMaterial({
-    color: '#e53e3e',
-    emissive: '#e53e3e',
-    emissiveIntensity: 0.3
-  });
-
-  for (let x = -45; x <= 45; x += 10) {
-    if (Math.abs(x) < 5) continue; // Laisser l'espace pour le portail
-
-    const bollard = new THREE.Mesh(bollardGeometry, bollardMaterial);
-    bollard.position.set(x, 0.5, 40);
-    bollard.userData = { isSecurityLED: true };
-    group.add(bollard);
-
-    // Ajouter aussi de l'autre côté
-    const bollard2 = bollard.clone();
-    bollard2.position.z = -40;
-    group.add(bollard2);
-  }
-
-  // Barrières rétractables
-  const barrierGeometry = new THREE.BoxGeometry(6, 0.5, 0.3);
-  const barrierMaterial = new THREE.MeshStandardMaterial({
-    color: '#ed8936',
-    emissive: '#ed8936',
-    emissiveIntensity: 0.5
-  });
-
-  const barrier = new THREE.Mesh(barrierGeometry, barrierMaterial);
-  barrier.position.set(0, 0.25, 39);
-  barrier.userData = { isSecurityLED: true, isInteractive: true };
-  group.add(barrier);
-
-  return group;
-};
-
-// 2. ZONES INTÉRIEURES
-const createInteriorZones = () => {
-  const group = new THREE.Group();
-  group.name = 'interior-zones';
-
-  // Zone d'accueil/réception
-  const receptionZone = createZone('Réception', [-20, 0.1, 35], [15, 0.2, 10], '#38a169');
-  receptionZone.userData.securityLevel = 'public';
-  group.add(receptionZone);
-
-  // Poste de sécurité
-  const securityDesk = createSecurityDesk([-15, 0, 32]);
-  group.add(securityDesk);
-
-  // SAS de sécurité
-  const airlockZone = createZone('SAS de Sécurité', [0, 0.1, 30], [8, 0.2, 4], '#ed8936');
-  airlockZone.userData.securityLevel = 'restricted';
-  group.add(airlockZone);
-
-  // Zone publique
-  const publicZone = createZone('Zone Publique', [-25, 0.1, 15], [20, 0.2, 25], '#38a169', 0.15);
-  group.add(publicZone);
-
-  // Zone restreinte
-  const restrictedZone = createZone('Zone Restreinte', [0, 0.1, 10], [25, 0.2, 20], '#ed8936', 0.15);
-  group.add(restrictedZone);
-
-  // Zone sensible
-  const sensitiveZone = createZone('Zone Sensible', [25, 0.1, 10], [20, 0.2, 20], '#e53e3e', 0.15);
-  group.add(sensitiveZone);
-
-  // Zone critique
-  const criticalZone = createZone('Zone Critique', [0, 0.1, -15], [30, 0.2, 15], '#805ad5', 0.15);
-  group.add(criticalZone);
-
-  return group;
-};
-
-const createZone = (name: string, position: number[], size: [number, number, number], color: string, opacity = 0.3) => {
-  const group = new THREE.Group();
-
-  // Zone colorée au sol
-  const zoneGeometry = new THREE.BoxGeometry(size[0], size[1], size[2]);
-  const zoneMaterial = new THREE.MeshPhysicalMaterial({
-    color,
-    transparent: true,
-    opacity,
-    transmission: 0.5,
-    thickness: 1,
-    side: THREE.DoubleSide
-  });
-
-  const zone = new THREE.Mesh(zoneGeometry, zoneMaterial);
-  zone.position.set(position[0], position[1], position[2]);
-  zone.rotation.x = -Math.PI / 2;
-  group.add(zone);
-
-  // Bordures de la zone
-  const borderGeometry = new THREE.BoxGeometry(size[0] + 0.2, 0.1, size[2] + 0.2);
-  const borderMaterial = new THREE.MeshBasicMaterial({
-    color,
-    transparent: true,
-    opacity: 0.8,
-    wireframe: true
-  });
-
-  const border = new THREE.Mesh(borderGeometry, borderMaterial);
-  border.position.set(position[0], position[1] + 0.05, position[2]);
-  group.add(border);
-
-  // Étiquette de zone
-  const text = new THREE.Group();
-  text.position.set(position[0], position[1] + 2, position[2]);
-  text.userData = { isLabel: true, zoneName: name };
-  group.add(text);
-
-  return group;
-};
-
-const createSecurityDesk = (position: number[]) => {
-  const group = new THREE.Group();
-  group.position.set(position[0], position[1], position[2]);
-
-  // Comptoir de sécurité
-  const deskGeometry = new THREE.BoxGeometry(4, 1, 2);
-  const deskMaterial = new THREE.MeshStandardMaterial({
-    color: '#2d3748',
-    metalness: 0.7,
-    roughness: 0.4
-  });
-
-  const desk = new THREE.Mesh(deskGeometry, deskMaterial);
-  desk.position.y = 0.5;
-  group.add(desk);
-
-  // Écrans de surveillance
-  const screenGeometry = new THREE.BoxGeometry(3, 0.8, 0.1);
-  const screenMaterial = new THREE.MeshStandardMaterial({
-    color: '#0f172a',
-    emissive: '#4299e1',
-    emissiveIntensity: 0.3
-  });
-
-  const screen = new THREE.Mesh(screenGeometry, screenMaterial);
-  screen.position.set(0, 1.2, 0.6);
-  group.add(screen);
-
-  // Chaise de sécurité
-  const chairGeometry = new THREE.BoxGeometry(0.8, 1, 0.8);
-  const chairMaterial = new THREE.MeshStandardMaterial({ color: '#4a5568' });
-
-  const chair = new THREE.Mesh(chairGeometry, chairMaterial);
-  chair.position.set(1.5, 0.5, -1);
-  group.add(chair);
-
-  return group;
-};
-
-// 3. INFRASTRUCTURE TECHNIQUE
-const createTechnicalInfrastructure = () => {
-  const group = new THREE.Group();
-  group.name = 'technical-infrastructure';
-
-  // Salle électrique
-  const electricalRoom = createRoom('Salle Électrique', [40, 0, 30], [8, 4, 10], '#e53e3e');
-  group.add(electricalRoom);
-
-  // Ajouter des transformateurs
-  for (let i = 0; i < 3; i++) {
-    const transformer = createTransformer([38 + i * 3, 0.5, 28]);
-    group.add(transformer);
-  }
-
-  // Groupes électrogènes
-  const generatorRoom = createRoom('Groupes Électrogènes', [-40, 0, 30], [8, 4, 12], '#ed8936');
-  group.add(generatorRoom);
-
-  for (let i = 0; i < 2; i++) {
-    const generator = createGenerator([-42 + i * 4, 0.5, 28]);
-    group.add(generator);
-  }
-
-  // Système de refroidissement
-  const coolingRoom = createRoom('Refroidissement', [40, 0, -30], [10, 5, 8], '#4299e1');
-  group.add(coolingRoom);
-
-  // Tours de refroidissement
+  /* Façade vitrée avec renforts */
   for (let i = 0; i < 4; i++) {
-    const coolingTower = createCoolingTower([36 + i * 3, 0.5, -32]);
-    group.add(coolingTower);
-  }
-
-  // Salle des serveurs de gestion
-  const managementRoom = createRoom('Salle de Contrôle', [-40, 0, -30], [12, 4, 10], '#38a169');
-  group.add(managementRoom);
-
-  return group;
-};
-
-const createRoom = (name: string, position: number[], size: [number, number, number], color: string) => {
-  const group = new THREE.Group();
-  group.position.set(position[0], position[1], position[2]);
-
-  // Structure de la salle
-  const roomGeometry = new THREE.BoxGeometry(size[0], size[1], size[2]);
-  const roomMaterial = new THREE.MeshStandardMaterial({
-    color,
-    transparent: true,
-    opacity: 0.7,
-    metalness: 0.5,
-    roughness: 0.5
-  });
-
-  const room = new THREE.Mesh(roomGeometry, roomMaterial);
-  group.add(room);
-
-  // Porte
-  const doorGeometry = new THREE.BoxGeometry(2, 3, 0.2);
-  const doorMaterial = new THREE.MeshStandardMaterial({
-    color: '#1a202c',
-    metalness: 0.9
-  });
-
-  const door = new THREE.Mesh(doorGeometry, doorMaterial);
-  door.position.set(0, 1.5, size[2]/2 + 0.1);
-  door.userData = { type: 'door', roomName: name, isInteractive: true };
-  group.add(door);
-
-  return group;
-};
-
-const createTransformer = (position: number[]) => {
-  const group = new THREE.Group();
-  group.position.set(position[0], position[1], position[2]);
-
-  const baseGeometry = new THREE.BoxGeometry(2, 2, 2);
-  const baseMaterial = new THREE.MeshStandardMaterial({
-    color: '#2d3748',
-    metalness: 0.8
-  });
-
-  const base = new THREE.Mesh(baseGeometry, baseMaterial);
-  group.add(base);
-
-  const topGeometry = new THREE.CylinderGeometry(0.8, 0.6, 1.5, 8);
-  const topMaterial = new THREE.MeshStandardMaterial({
-    color: '#e53e3e',
-    metalness: 0.7
-  });
-
-  const top = new THREE.Mesh(topGeometry, topMaterial);
-  top.position.y = 1.75;
-  group.add(top);
-
-  return group;
-};
-
-const createGenerator = (position: number[]) => {
-  const group = new THREE.Group();
-  group.position.set(position[0], position[1], position[2]);
-
-  const generatorGeometry = new THREE.BoxGeometry(3, 2, 2);
-  const generatorMaterial = new THREE.MeshStandardMaterial({
-    color: '#d69e2e',
-    metalness: 0.6
-  });
-
-  const generator = new THREE.Mesh(generatorGeometry, generatorMaterial);
-  group.add(generator);
-
-  // Échappement
-  const exhaustGeometry = new THREE.CylinderGeometry(0.3, 0.2, 1, 8);
-  const exhaustMaterial = new THREE.MeshStandardMaterial({
-    color: '#4a5568'
-  });
-
-  const exhaust = new THREE.Mesh(exhaustGeometry, exhaustMaterial);
-  exhaust.position.set(0, 1.5, 1);
-  exhaust.rotation.x = Math.PI / 2;
-  group.add(exhaust);
-
-  return group;
-};
-
-const createCoolingTower = (position: number[]) => {
-  const group = new THREE.Group();
-  group.position.set(position[0], position[1], position[2]);
-
-  const towerGeometry = new THREE.CylinderGeometry(1, 1.5, 3, 8);
-  const towerMaterial = new THREE.MeshStandardMaterial({
-    color: '#4299e1',
-    metalness: 0.7
-  });
-
-  const tower = new THREE.Mesh(towerGeometry, towerMaterial);
-  group.add(tower);
-
-  // Ventilateur
-  const fanGeometry = new THREE.CylinderGeometry(1.2, 1.2, 0.2, 8);
-  const fanMaterial = new THREE.MeshStandardMaterial({
-    color: '#a0aec0'
-  });
-
-  const fan = new THREE.Mesh(fanGeometry, fanMaterial);
-  fan.position.y = 1.6;
-  group.add(fan);
-
-  return group;
-};
-
-// 4. SALLES SERVEURS
-const createServerRooms = () => {
-  const group = new THREE.Group();
-  group.name = 'server-rooms';
-
-  // Configuration des rangées de racks
-  const rackConfigs: { position: number[]; count: number; type: string; row: number }[] = [
-    { position: [-25, 0, -10], count: 6, type: 'standard', row: 1 },
-    { position: [-25, 0, 10], count: 6, type: 'storage', row: 2 },
-    { position: [25, 0, -10], count: 6, type: 'network', row: 3 },
-    { position: [25, 0, 10], count: 6, type: 'high-density', row: 4 }
-  ];
-
-  rackConfigs.forEach(config => {
-    const rackRow = createRackRow(config);
-    group.add(rackRow);
-  });
-
-  // Allées techniques
-  const aisleGeometry = new THREE.BoxGeometry(60, 0.1, 4);
-  const aisleMaterial = new THREE.MeshStandardMaterial({
-    color: '#1a202c',
-    metalness: 0.3,
-    roughness: 0.8
-  });
-
-  const coldAisle = new THREE.Mesh(aisleGeometry, aisleMaterial);
-  coldAisle.position.set(0, 0.05, 0);
-  group.add(coldAisle);
-
-  const hotAisle = new THREE.Mesh(aisleGeometry, aisleMaterial);
-  hotAisle.position.set(0, 0.05, 20);
-  group.add(hotAisle);
-
-  // Plafond technique avec gainages
-  const ceilingGeometry = new THREE.BoxGeometry(70, 0.5, 50);
-  const ceilingMaterial = new THREE.MeshStandardMaterial({
-    color: '#2d3748',
-    metalness: 0.6
-  });
-
-  const ceiling = new THREE.Mesh(ceilingGeometry, ceilingMaterial);
-  ceiling.position.set(0, 7, 5);
-  group.add(ceiling);
-
-  // Gainages d'air
-  for (let x = -30; x <= 30; x += 10) {
-    const duct = createAirDuct([x, 6.5, 5] as [number, number, number]);
-    group.add(duct);
-  }
-
-  return group;
-};
-
-const createRackRow = ({ position, count, type }: { position: number[]; count: number; type: string; row: number }) => {
-  const group = new THREE.Group();
-  group.position.set(position[0], position[1], position[2]);
-
-  const rackColors: { [key: string]: string } = {
-    standard: '#4a5568',
-    storage: '#38a169',
-    network: '#4299e1',
-    'high-density': '#805ad5'
-  };
-
-  for (let i = 0; i < count; i++) {
-    const pos: [number, number, number] = [i * 8 - (count-1)*4, 0, 0];
-    const rack = createServerRack(
-      pos,
-      rackColors[type],
-      type,
-      i
+    const glassPanel = new THREE.Mesh(
+      new THREE.PlaneGeometry(118, 23),
+      new THREE.MeshPhysicalMaterial({
+        color: '#e6fffa',
+        transmission: 0.85,
+        thickness: 0.8,
+        roughness: 0.05,
+        metalness: 0.2,
+        ior: 1.52,
+        transparent: true,
+        opacity: 0.7
+      })
     );
-    group.add(rack);
+    const angle = i * Math.PI / 2;
+    glassPanel.position.set(
+      Math.cos(angle) * 60,
+      12,
+      Math.sin(angle) * 40
+    );
+    glassPanel.rotation.y = angle + Math.PI / 2;
+    glassPanel.userData = {
+      type: 'building',
+      buildingType: 'glass_facade',
+      buildingId: `glass-panel-${i}`,
+      status: 'operational',
+      area: '2714 sqm'
+    };
+    grp.add(glassPanel);
   }
 
-  return group;
-};
+  /* Toit technique avec équipements */
+  const roof = new THREE.Mesh(
+    new THREE.BoxGeometry(122, 1, 82),
+    new THREE.MeshPhysicalMaterial({
+      color: '#2d3748',
+      metalness: 0.9,
+      roughness: 0.2
+    })
+  );
+  roof.position.y = 25.5;
+  grp.add(roof);
 
-const createServerRack = (position: number[], color: string, type: string, index: number) => {
-  const group = new THREE.Group();
-  group.position.set(position[0], position[1], position[2]);
-  group.userData = {
-    type: 'server-rack',
-    rackType: type,
-    rackId: `RACK-${type.toUpperCase()}-${String(index+1).padStart(3, '0')}`,
-    isInteractive: true
-  };
-
-  // Structure du rack
-  const rackGeometry = new THREE.BoxGeometry(2, 6, 1);
-  const rackMaterial = new THREE.MeshStandardMaterial({
-    color,
-    metalness: 0.8,
-    roughness: 0.3
-  });
-
-  const rack = new THREE.Mesh(rackGeometry, rackMaterial);
-  rack.castShadow = true;
-  group.add(rack);
-
-  // Panneaux avant
-  const panelGeometry = new THREE.BoxGeometry(1.8, 5.8, 0.05);
-  const panelMaterial = new THREE.MeshStandardMaterial({
-    color: '#1a202c',
-    metalness: 0.9,
-    roughness: 0.2
-  });
-
-  const frontPanel = new THREE.Mesh(panelGeometry, panelMaterial);
-  frontPanel.position.z = 0.51;
-  group.add(frontPanel);
-
-  // Serveurs à l'intérieur
+  /* Unités de climatisation sur le toit avec plus de détails */
   for (let i = 0; i < 8; i++) {
-    const pos: [number, number, number] = [0, -2 + i * 0.7, 0.3];
-    const server = createServerUnit(pos, i);
-    group.add(server);
+    const acUnit = new THREE.Group();
+    
+    const base = new THREE.Mesh(
+      new THREE.BoxGeometry(4, 0.5, 4),
+      new THREE.MeshStandardMaterial({ color: '#2d3748' })
+    );
+    base.position.y = 0.25;
+    
+    const body = new THREE.Mesh(
+      new THREE.BoxGeometry(3.5, 1.5, 3.5),
+      new THREE.MeshStandardMaterial({ color: '#718096', metalness: 0.7 })
+    );
+    body.position.y = 1;
+    
+    const fan = new THREE.Mesh(
+      new THREE.CylinderGeometry(1.5, 1.5, 0.2, 16),
+      new THREE.MeshStandardMaterial({ color: '#1a202c' })
+    );
+    fan.position.y = 1.9;
+    fan.userData = { fan: true };
+    
+    const grille = new THREE.Mesh(
+      new THREE.BoxGeometry(3, 0.1, 3),
+      new THREE.MeshStandardMaterial({ 
+        color: '#cbd5e0',
+        transparent: true,
+        opacity: 0.6
+      })
+    );
+    grille.position.y = 1.9;
+    
+    const statusLED = new THREE.Mesh(
+      new THREE.SphereGeometry(0.1, 16, 16),
+      new THREE.MeshStandardMaterial({
+        color: '#00ff00',
+        emissive: '#00ff00',
+        emissiveIntensity: 1
+      })
+    );
+    statusLED.position.set(1.5, 1.5, 1.5);
+    statusLED.userData = { led: true, phase: i * 0.5 };
+    
+    acUnit.add(base, body, fan, grille, statusLED);
+    acUnit.position.set(
+      (i % 4 - 1.5) * 20,
+      27,
+      Math.floor(i / 4) * 20 - 10
+    );
+    acUnit.userData = {
+      type: 'equipment',
+      equipmentType: 'air_conditioning_unit',
+      equipmentId: `ac-unit-${i}`,
+      status: 'active',
+      coolingCapacity: '100kW'
+    };
+
+    grp.add(acUnit);
   }
 
-  // LEDs de statut
-  const ledGeometry = new THREE.SphereGeometry(0.08, 8, 8);
-  const ledMaterial = new THREE.MeshStandardMaterial({
-    color: index === 2 ? '#e53e3e' : '#38a169',
-    emissive: index === 2 ? '#e53e3e' : '#38a169',
-    emissiveIntensity: 0.8
-  });
+  /* Entrée principale avec marquage */
+  const entrance = new THREE.Mesh(
+    new THREE.BoxGeometry(10, 8, 0.5),
+    new THREE.MeshStandardMaterial({ color: '#e53e3e' })
+  );
+  entrance.position.set(0, 4, 40.5);
+  grp.add(entrance);
 
-  const led = new THREE.Mesh(ledGeometry, ledMaterial);
-  led.position.set(0.9, 2.8, 0.6);
-  led.userData = { isSecurityLED: true };
-  group.add(led);
-
-  // Étiquette du rack
-  const labelGeometry = new THREE.PlaneGeometry(1, 0.3);
-  const labelMaterial = new THREE.MeshBasicMaterial({
-    color: '#ffffff',
-    transparent: true,
-    opacity: 0.9,
-    side: THREE.DoubleSide
-  });
-
-  const label = new THREE.Mesh(labelGeometry, labelMaterial);
-  label.position.set(0, 3.2, 0.6);
-  label.rotation.y = Math.PI;
-  group.add(label);
-
-  return group;
+  return grp;
 };
 
-const createServerUnit = (position: [number, number, number], index: number) => {
-  const group = new THREE.Group();
-  group.position.set(position[0], position[1], position[2]);
+/* ------------------------------------------------------------- */
+/* 2. ZONE FONCTIONNELLE DÉTAILLÉE                               */
+/* ------------------------------------------------------------- */
+const createZone = (cfg: { 
+  id: string; 
+  name: string; 
+  color: string; 
+  pos: [number, number, number];
+  icon: string;
+}) => {
+  const grp = new THREE.Group();
+  grp.position.set(...cfg.pos);
 
-  const serverGeometry = new THREE.BoxGeometry(1.6, 0.5, 0.4);
-  const serverMaterial = new THREE.MeshStandardMaterial({
-    color: index % 2 === 0 ? '#2d3748' : '#4a5568',
-    metalness: 0.7,
-    roughness: 0.4
-  });
+  /* Sol surélevé technique */
+  const floor = new THREE.Mesh(
+    new THREE.BoxGeometry(30, 0.5, 30),
+    new THREE.MeshStandardMaterial({
+      color: '#2d3748',
+      metalness: 0.8,
+      roughness: 0.3
+    })
+  );
+  floor.position.y = 0.25;
+  floor.receiveShadow = true;
+  floor.userData = {
+    type: 'infrastructure',
+    infrastructureType: 'raised_floor',
+    zoneId: cfg.id,
+    area: '900 sqm'
+  };
+  grp.add(floor);
 
-  const server = new THREE.Mesh(serverGeometry, serverMaterial);
-  group.add(server);
+  /* Marquage au sol */
+  const marking = new THREE.Mesh(
+    new THREE.PlaneGeometry(28, 28),
+    new THREE.MeshStandardMaterial({
+      color: cfg.color,
+      emissive: cfg.color,
+      emissiveIntensity: 0.1,
+      side: THREE.DoubleSide
+    })
+  );
+  marking.position.y = 0.26;
+  marking.rotation.x = -Math.PI / 2;
+  marking.userData = {
+    type: 'infrastructure',
+    infrastructureType: 'floor_marking',
+    zoneId: cfg.id,
+    zoneName: cfg.name,
+    area: '784 sqm'
+  };
+  grp.add(marking);
 
-  // LEDs d'activité
-  const activityLedGeometry = new THREE.SphereGeometry(0.03, 4, 4);
-  const activityLedMaterial = new THREE.MeshStandardMaterial({
-    color: Math.random() > 0.5 ? '#38a169' : '#a0aec0',
-    emissive: Math.random() > 0.5 ? '#38a169' : '#a0aec0',
-    emissiveIntensity: 0.5
-  });
+  /* Racks serveurs avec détails */
+  if (['technique', 'stockage', 'reseau'].includes(cfg.id)) {
+    const rackCount = cfg.id === 'stockage' ? 8 : 6;
+    const rackHeight = cfg.id === 'stockage' ? 10 : 8;
+    
+    for (let r = 0; r < rackCount; r++) {
+      const row = new THREE.Group();
+      row.position.set((r - (rackCount-1)/2) * 4, 0.5, 0);
+      
+      for (let u = 0; u < 12; u++) {
+        const rack = new THREE.Mesh(
+          new THREE.BoxGeometry(0.8, rackHeight, 1.5),
+          new THREE.MeshPhysicalMaterial({
+            color: '#1a202c',
+            metalness: 0.9,
+            roughness: 0.2
+          })
+        );
+        rack.position.set(0, rackHeight/2, (u - 5.5) * 2.2);
+        rack.castShadow = true;
+        rack.userData = {
+          type: 'rack',
+          rackId: `${cfg.id}-rack-${r}-${u}`,
+          zone: cfg.id,
+          capacity: '42U'
+        };
+        row.add(rack);
 
-  const activityLed = new THREE.Mesh(activityLedGeometry, activityLedMaterial);
-  activityLed.position.set(0.7, 0, 0.21);
-  group.add(activityLed);
+        /* LEDs d'activité */
+        for (let led = 0; led < 3; led++) {
+          const activityLED = new THREE.Mesh(
+            new THREE.SphereGeometry(0.08, 12, 12),
+            new THREE.MeshStandardMaterial({
+              color: cfg.color,
+              emissive: cfg.color
+            })
+          );
+          activityLED.position.set(
+            0.45,
+            rackHeight - 1 - led * 2,
+            (u - 5.5) * 2.2
+          );
+          activityLED.userData = { 
+            led: true, 
+            phase: Math.random() * Math.PI * 2 
+          };
+          row.add(activityLED);
+        }
 
-  return group;
+        /* Panneau avant avec ports */
+        const frontPanel = new THREE.Mesh(
+          new THREE.BoxGeometry(0.1, rackHeight, 1.5),
+          new THREE.MeshStandardMaterial({ color: '#4a5568' })
+        );
+        frontPanel.position.set(0.4, rackHeight/2, (u - 5.5) * 2.2);
+        row.add(frontPanel);
+
+        /* Ports réseau */
+        for (let p = 0; p < 4; p++) {
+          const port = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.03, 0.03, 0.1, 8),
+            new THREE.MeshStandardMaterial({ color: '#00ff00' })
+          );
+          port.position.set(
+            0.45,
+            rackHeight - 2 - p * 1.5,
+            (u - 5.5) * 2.2 + 0.3
+          );
+          row.add(port);
+        }
+      }
+      grp.add(row);
+    }
+
+    /* Système d'extinction incendie amélioré */
+    const fireSuppression = new THREE.Group();
+    
+    const fireBase = new THREE.Mesh(
+      new THREE.BoxGeometry(2, 1, 2),
+      new THREE.MeshStandardMaterial({ color: '#4a5568' })
+    );
+    fireBase.position.y = 0.5;
+    
+    const fireTank = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.3, 0.3, 8, 16),
+      new THREE.MeshStandardMaterial({ color: '#e53e3e', metalness: 0.9 })
+    );
+    fireTank.position.y = 4.5;
+    
+    const fireNozzle = new THREE.Mesh(
+      new THREE.ConeGeometry(0.15, 0.5, 8),
+      new THREE.MeshStandardMaterial({ color: '#cbd5e0' })
+    );
+    fireNozzle.position.y = 8.5;
+    
+    const warningLight = new THREE.Mesh(
+      new THREE.SphereGeometry(0.2, 16, 16),
+      new THREE.MeshStandardMaterial({
+        color: '#ff0000',
+        emissive: '#ff0000',
+        emissiveIntensity: 1
+      })
+    );
+    warningLight.position.set(0, 9, 0);
+    warningLight.userData = { led: true, phase: Math.PI };
+    
+    fireSuppression.add(fireBase, fireTank, fireNozzle, warningLight);
+    fireSuppression.position.set(0, 0, 12);
+    fireSuppression.userData = {
+      type: 'equipment',
+      equipmentType: 'fire_suppression',
+      equipmentId: `${cfg.id}-fire-suppression`,
+      status: 'active',
+      capacity: '1000L'
+    };
+    grp.add(fireSuppression);
+    
+    /* Système de monitoring environnemental */
+    const envMonitor = new THREE.Group();
+    
+    const monitorBox = new THREE.Mesh(
+      new THREE.BoxGeometry(1.5, 2, 0.5),
+      new THREE.MeshStandardMaterial({ color: '#2d3748' })
+    );
+    
+    const screen = new THREE.Mesh(
+      new THREE.PlaneGeometry(1.2, 1.5),
+      new THREE.MeshStandardMaterial({
+        color: '#00ff00',
+        emissive: '#00ff00',
+        emissiveIntensity: 0.5
+      })
+    );
+    screen.position.set(0, 0, 0.26);
+    
+    const tempSensor = new THREE.Mesh(
+      new THREE.SphereGeometry(0.15, 16, 16),
+      new THREE.MeshStandardMaterial({ color: '#3498db' })
+    );
+    tempSensor.position.set(0, 2, 0);
+    
+    envMonitor.add(monitorBox, screen, tempSensor);
+    envMonitor.position.set(12, 5, 0);
+    envMonitor.userData = {
+      type: 'equipment',
+      equipmentType: 'environmental_monitor',
+      equipmentId: `${cfg.id}-env-monitor`,
+      status: 'active'
+    };
+    grp.add(envMonitor);
+    
+    /* Station de maintenance d'urgence */
+    const emergencyStation = new THREE.Mesh(
+      new THREE.BoxGeometry(1, 2, 0.3),
+      new THREE.MeshStandardMaterial({
+        color: '#e53e3e',
+        emissive: '#e53e3e',
+        emissiveIntensity: 0.3
+      })
+    );
+    emergencyStation.position.set(-12, 5, 0);
+    
+    const emergencyLight = new THREE.Mesh(
+      new THREE.SphereGeometry(0.2, 16, 16),
+      new THREE.MeshStandardMaterial({
+        color: '#ffffff',
+        emissive: '#ffffff',
+        emissiveIntensity: 1
+      })
+    );
+    emergencyLight.position.set(-12, 6.5, 0.2);
+    emergencyLight.userData = { led: true, phase: Math.PI / 2 };
+    grp.add(emergencyStation, emergencyLight);
+  }
+
+  /* Panneau d'identification 3D avec texte */
+  const labelBackground = new THREE.Mesh(
+    new THREE.BoxGeometry(10, 2, 0.3),
+    new THREE.MeshStandardMaterial({ 
+      color: '#1a202c',
+      metalness: 0.8,
+      emissive: cfg.color,
+      emissiveIntensity: 0.2
+    })
+  );
+  labelBackground.position.set(0, 13, 0);
+  grp.add(labelBackground);
+
+  /* Barre LED décorative */
+  const ledStrip = new THREE.Mesh(
+    new THREE.BoxGeometry(9, 0.1, 0.1),
+    new THREE.MeshStandardMaterial({
+      color: cfg.color,
+      emissive: cfg.color,
+      emissiveIntensity: 1
+    })
+  );
+  ledStrip.position.set(0, 14.2, 0.2);
+  ledStrip.userData = { led: true, phase: 0 };
+  grp.add(ledStrip);
+
+  /* Caméras de surveillance dans la zone */
+  for (let i = 0; i < 4; i++) {
+    const angle = (i / 4) * Math.PI * 2;
+    const camera = new THREE.Group();
+    
+    const cameraBase = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.3, 0.3, 0.5, 16),
+      new THREE.MeshStandardMaterial({ color: '#1a202c' })
+    );
+    cameraBase.position.set(
+      Math.cos(angle) * 13,
+      10,
+      Math.sin(angle) * 13
+    );
+    
+    const cameraHead = new THREE.Mesh(
+      new THREE.SphereGeometry(0.25, 16, 16),
+      new THREE.MeshStandardMaterial({ color: '#000000' })
+    );
+    cameraHead.position.y = 0.4;
+    cameraHead.userData = { camera: true };
+    
+    camera.add(cameraBase, cameraHead);
+    grp.add(camera);
+  }
+
+  return grp;
 };
 
-const createAirDuct = (position: [number, number, number]) => {
-  const group = new THREE.Group();
-  group.position.set(position[0], position[1], position[2]);
+/* ------------------------------------------------------------- */
+/* 3. SÉCURITÉ PÉRIMÉTRIQUE COMPLÈTE                             */
+/* ------------------------------------------------------------- */
+const createSecurityPerimeter = () => {
+  const grp = new THREE.Group();
 
-  const ductGeometry = new THREE.CylinderGeometry(0.8, 0.8, 20, 8);
-  const ductMaterial = new THREE.MeshStandardMaterial({
-    color: '#4a5568',
-    metalness: 0.8
-  });
+  /* Clôture haute sécurité */
+  const createFenceSection = (length: number) => {
+    const section = new THREE.Group();
+    const poleCount = Math.floor(length / 4);
+    
+    for (let i = 0; i <= poleCount; i++) {
+      const pole = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.2, 0.2, 5, 8),
+        new THREE.MeshStandardMaterial({ 
+          color: '#2d3748',
+          metalness: 0.9
+        })
+      );
+      pole.position.set(i * 4 - length/2, 2.5, 0);
+      section.add(pole);
 
-  const duct = new THREE.Mesh(ductGeometry, ductMaterial);
-  duct.rotation.z = Math.PI / 2;
-  group.add(duct);
+      /* Barbelés au sommet */
+      const barbedWire = new THREE.Mesh(
+        new THREE.TorusGeometry(0.3, 0.05, 8, 16),
+        new THREE.MeshStandardMaterial({ color: '#cbd5e0' })
+      );
+      barbedWire.position.set(i * 4 - length/2, 5, 0);
+      barbedWire.rotation.x = Math.PI / 2;
+      section.add(barbedWire);
 
-  return group;
-};
+      /* Projecteur sur poteau */
+      const spotlight = new THREE.Mesh(
+        new THREE.ConeGeometry(0.4, 1, 8),
+        new THREE.MeshStandardMaterial({ color: '#f6e05e' })
+      );
+      spotlight.position.set(i * 4 - length/2, 4.8, 0);
+      spotlight.rotation.x = Math.PI / 4;
+      spotlight.userData = { spotlight: true };
+      section.add(spotlight);
+    }
 
-// 5. SYSTÈMES DE SÉCURITÉ
-const createSecuritySystems = () => {
-  const group = new THREE.Group();
-  group.name = 'security-systems';
+    /* Grillage entre les poteaux */
+    const mesh = new THREE.Mesh(
+      new THREE.PlaneGeometry(length, 4),
+      new THREE.MeshStandardMaterial({
+        color: '#718096',
+        metalness: 0.8,
+        transparent: true,
+        opacity: 0.7,
+        side: THREE.DoubleSide
+      })
+    );
+    mesh.position.set(0, 2.5, 0);
+    mesh.rotation.y = Math.PI / 2;
+    section.add(mesh);
 
-  // Caméras de surveillance intérieure
-  const cameraPositions = [
-    // Niveau sol
-    [-35, 4, 35], [35, 4, 35], [-35, 4, -35], [35, 4, -35],
-    // Niveau plafond
-    [-35, 6, 0], [35, 6, 0], [0, 6, 35], [0, 6, -35],
-    // Couloirs
-    [-20, 4, 20], [20, 4, 20], [-20, 4, -20], [20, 4, -20]
-  ];
-
-  cameraPositions.forEach((pos, i) => {
-    const camera = createSecurityCamera(pos, i < 4 ? 'dome' : 'ptz');
-    group.add(camera);
-  });
-
-  // // Lecteurs de badge
-  // const cardReaderPositions = [
-  //   [0, 1.2, 36], [-15, 1.2, 36], [15, 1.2, 36],  // Entrée principale
-  //   [0, 1.2, 30],                                  // SAS
-  //   [-25, 1.2, 0], [25, 1.2, 0]                   // Zones restreintes
-  // ];
-
-  // cardReaderPositions.forEach(pos => {
-  //   const reader = createCardReader(pos);
-  //   group.add(reader);
-  // });
-
-  // // Scanner biométrique
-  // const biometricScanner = createBiometricScanner([0, 0.8, 32]);
-  // group.add(biometricScanner);
-
-  // // Détecteur de métaux
-  // const metalDetector = createMetalDetector([0, 0, 34] as [number, number, number]);
-  // group.add(metalDetector);
-
-  // // Tourniquets de sécurité
-  // const turnstilePositions = [
-  //   [0, 0, 35], [-15, 0, 35], [15, 0, 35],
-  //   [0, 0, 29], [-25, 0, -5], [25, 0, -5]
-  // ];
-
-  // turnstilePositions.forEach((pos, i) => {
-  // const turnstile = createTurnstile(pos as [number, number, number], i % 2 === 0);
-  // group.add(turnstile);
-  // });
-
-  // // Système anti-incendie
-  // group.add(createFireSuppressionSystem());
-
-  // // Détecteurs de fumée
-  // for (let x = -30; x <= 30; x += 15) {
-  //   for (let z = -30; z <= 30; z += 15) {
-  //     if (Math.abs(x) < 10 && Math.abs(z) < 10) continue;
-  //     const smokeDetector = createSmokeDetector([x, 5, z] as [number, number, number]);
-  //     group.add(smokeDetector);
-  //   }
-  // }
-
-  // // Extincteurs
-  // const extinguisherPositions: [number, number, number][] = [
-  //   [-38, 0.5, 35], [38, 0.5, 35], [-38, 0.5, -35], [38, 0.5, -35],
-  //   [0, 0.5, 25], [0, 0.5, -25]
-  // ];
-
-  // extinguisherPositions.forEach((pos: [number, number, number]) => {
-  //   const extinguisher = createFireExtinguisher(pos);
-  //   group.add(extinguisher);
-  // });
-
-  return group;
-};
-
-const createSecurityCamera = (position: number[], type: string = 'dome') => {
-  const group = new THREE.Group();
-  group.position.set(position[0], position[1], position[2]);
-  group.userData = {
-    type: 'security-camera',
-    cameraType: type,
-    isPTZCamera: type === 'ptz',
-    isInteractive: true
+    return section;
   };
 
-  // Support mural
-  const mountGeometry = new THREE.BoxGeometry(0.3, 0.5, 0.3);
-  const mountMaterial = new THREE.MeshStandardMaterial({
-    color: '#4a5568',
-    metalness: 0.8
+  /* Clôture autour du périmètre */
+  const perimeterLengths = [200, 150, 200, 150];
+  perimeterLengths.forEach((length, index) => {
+    const fence = createFenceSection(length);
+    const angle = (index * Math.PI) / 2;
+    fence.position.set(
+      Math.cos(angle) * (index % 2 === 0 ? 100 : 75),
+      0,
+      Math.sin(angle) * (index % 2 === 0 ? 100 : 75)
+    );
+    fence.rotation.y = angle + Math.PI / 2;
+    grp.add(fence);
   });
 
-  const mount = new THREE.Mesh(mountGeometry, mountMaterial);
-  mount.position.y = -0.25;
-  group.add(mount);
+  /* Portails d'accès sécurisés */
+  const createSecurityGate = (pos: [number, number, number]) => {
+    const gate = new THREE.Group();
+    gate.position.set(...pos);
 
-  if (type === 'dome') {
-    // Caméra dôme
-    const domeGeometry = new THREE.SphereGeometry(0.4, 16, 16, 0, Math.PI * 2, 0, Math.PI / 2);
-    const domeMaterial = new THREE.MeshPhysicalMaterial({
-      color: '#1a202c',
-      transmission: 0.9,
-      thickness: 0.2,
-      roughness: 0.1,
-      metalness: 0.9
-    });
+    /* Piliers du portail */
+    const leftPillar = new THREE.Mesh(
+      new THREE.BoxGeometry(1, 6, 1),
+      new THREE.MeshStandardMaterial({ color: '#4a5568' })
+    );
+    leftPillar.position.set(-3, 3, 0);
+    
+    const rightPillar = leftPillar.clone();
+    rightPillar.position.set(3, 3, 0);
+    
+    /* Barrière coulissante */
+    const barrier = new THREE.Mesh(
+      new THREE.BoxGeometry(6, 0.3, 0.1),
+      new THREE.MeshStandardMaterial({ 
+        color: '#e53e3e',
+        emissive: '#e53e3e',
+        emissiveIntensity: 0.3
+      })
+    );
+    barrier.position.set(0, 1.5, 0);
+    barrier.userData = { barrier: true };
+    
+    /* Lecteur de badge */
+    const badgeReader = new THREE.Mesh(
+      new THREE.BoxGeometry(0.3, 0.5, 0.1),
+      new THREE.MeshStandardMaterial({ color: '#000000' })
+    );
+    badgeReader.position.set(-2.8, 1, 0.6);
+    
+    /* Caméra du portail */
+    const gateCamera = new THREE.Group();
+    const camBase = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.2, 0.2, 0.4, 16),
+      new THREE.MeshStandardMaterial({ color: '#1a202c' })
+    );
+    const camHead = new THREE.Mesh(
+      new THREE.SphereGeometry(0.15, 16, 16),
+      new THREE.MeshStandardMaterial({ color: '#000000' })
+    );
+    camHead.position.y = 0.3;
+    camHead.userData = { camera: true };
+    gateCamera.add(camBase, camHead);
+    gateCamera.position.set(2.8, 3, 0.6);
+    
+    gate.add(leftPillar, rightPillar, barrier, badgeReader, gateCamera);
+    return gate;
+  };
 
-    const dome = new THREE.Mesh(domeGeometry, domeMaterial);
-    group.add(dome);
+  /* Portails aux entrées */
+  const gates = [
+    [0, 0, 75] as [number, number, number],
+    [0, 0, -75] as [number, number, number],
+    [100, 0, 0] as [number, number, number],
+    [-100, 0, 0] as [number, number, number]
+  ];
+  gates.forEach(pos => grp.add(createSecurityGate(pos)));
 
-    // LED d'activité
-    const ledGeometry = new THREE.SphereGeometry(0.08, 8, 8);
-    const ledMaterial = new THREE.MeshStandardMaterial({
-      color: '#e53e3e',
-      emissive: '#e53e3e',
-      emissiveIntensity: 0.8
-    });
+  return grp;
+};
 
-    const led = new THREE.Mesh(ledGeometry, ledMaterial);
-    led.position.set(0, 0.1, 0.35);
-    led.userData = { isSecurityLED: true };
-    group.add(led);
-  } else {
-    // Caméra PTZ
-    const baseGeometry = new THREE.BoxGeometry(0.3, 0.3, 0.3);
-    const baseMaterial = new THREE.MeshStandardMaterial({
-      color: '#2d3748'
-    });
+/* ------------------------------------------------------------- */
+/* 4. INFRASTRUCTURES EXTÉRIEURES                                */
+/* ------------------------------------------------------------- */
+const createExternalInfrastructure = () => {
+  const grp = new THREE.Group();
 
-    const base = new THREE.Mesh(baseGeometry, baseMaterial);
-    group.add(base);
+  /* Groupes électrogènes */
+  for (let i = 0; i < 4; i++) {
+    const generator = new THREE.Group();
+    
+    const base = new THREE.Mesh(
+      new THREE.BoxGeometry(6, 1, 3),
+      new THREE.MeshStandardMaterial({ color: '#1a202c' })
+    );
+    base.position.y = 0.5;
+    
+    const body = new THREE.Mesh(
+      new THREE.BoxGeometry(5, 2, 2),
+      new THREE.MeshStandardMaterial({ color: '#4a5568' })
+    );
+    body.position.y = 2;
+    
+    const exhaust = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.3, 0.3, 1, 16),
+      new THREE.MeshStandardMaterial({ color: '#718096' })
+    );
+    exhaust.position.set(0, 3.5, 0);
+    
+    const controlPanel = new THREE.Mesh(
+      new THREE.BoxGeometry(1, 1.5, 0.2),
+      new THREE.MeshStandardMaterial({ color: '#000000' })
+    );
+    controlPanel.position.set(2, 1.5, 1);
+    
+    generator.add(base, body, exhaust, controlPanel);
+    generator.position.set(
+      i < 2 ? -60 : 60,
+      0,
+      i % 2 === 0 ? -40 : 40
+    );
 
-    const cameraGeometry = new THREE.BoxGeometry(0.4, 0.3, 0.5);
-    const cameraMaterial = new THREE.MeshStandardMaterial({
-      color: '#1a202c',
-      metalness: 0.9
-    });
+    generator.userData = {
+      type: 'equipment',
+      equipmentType: 'backup_generator',
+      equipmentId: `generator-${i}`,
+      status: 'active',
+      powerOutput: '500kW'
+    };
 
-    const camera = new THREE.Mesh(cameraGeometry, cameraMaterial);
-    camera.position.z = 0.25;
-    group.add(camera);
-
-    // Lentille
-    const lensGeometry = new THREE.CylinderGeometry(0.1, 0.15, 0.3, 8);
-    const lensMaterial = new THREE.MeshPhysicalMaterial({
-      color: '#000000',
-      transmission: 0.95,
-      roughness: 0
-    });
-
-    const lens = new THREE.Mesh(lensGeometry, lensMaterial);
-    lens.position.set(0, 0, 0.5);
-    lens.rotation.x = Math.PI / 2;
-    group.add(lens);
+    grp.add(generator);
   }
 
-  return group;
-};
+  /* Unités de refroidissement */
+  for (let i = 0; i < 6; i++) {
+    const coolingUnit = new THREE.Group();
+    
+    const housing = new THREE.Mesh(
+      new THREE.BoxGeometry(4, 3, 4),
+      new THREE.MeshStandardMaterial({ color: '#a0aec0' })
+    );
+    housing.position.y = 1.5;
+    
+    const fan = new THREE.Mesh(
+      new THREE.CylinderGeometry(1.5, 1.5, 0.3, 16),
+      new THREE.MeshStandardMaterial({ color: '#2d3748' })
+    );
+    fan.position.y = 3;
+    fan.userData = { fan: true };
+    
+    coolingUnit.add(housing, fan);
+    coolingUnit.position.set(
+      (i % 3 - 1) * 15,
+      0,
+      Math.floor(i / 3) * 30 - 15
+    );
 
-const createCardReader = (position: number[]) => {
-  const group = new THREE.Group();
-  group.position.set(position[0], position[1], position[2]);
-  group.userData = { type: 'card-reader', isInteractive: true };
+    coolingUnit.userData = {
+      type: 'equipment',
+      equipmentType: 'cooling_unit',
+      equipmentId: `cooling-unit-${i}`,
+      status: 'active',
+      coolingCapacity: '50kW'
+    };
 
-  const readerGeometry = new THREE.BoxGeometry(0.4, 0.2, 0.1);
-  const readerMaterial = new THREE.MeshStandardMaterial({
-    color: '#2d3748',
-    metalness: 0.9
-  });
-
-  const reader = new THREE.Mesh(readerGeometry, readerMaterial);
-  group.add(reader);
-
-  // Écran LED
-  const screenGeometry = new THREE.BoxGeometry(0.35, 0.15, 0.02);
-  const screenMaterial = new THREE.MeshStandardMaterial({
-    color: '#0f172a',
-    emissive: '#38a169',
-    emissiveIntensity: 0.5
-  });
-
-  const screen = new THREE.Mesh(screenGeometry, screenMaterial);
-  screen.position.z = 0.06;
-  group.add(screen);
-
-  return group;
-};
-
-const createBiometricScanner = (position: number[]) => {
-  const group = new THREE.Group();
-  group.position.set(position[0], position[1], position[2]);
-  group.userData = { type: 'biometric-scanner', isInteractive: true };
-
-  const scannerGeometry = new THREE.BoxGeometry(0.6, 0.4, 0.3);
-  const scannerMaterial = new THREE.MeshStandardMaterial({
-    color: '#1a365d',
-    metalness: 0.8
-  });
-
-  const scanner = new THREE.Mesh(scannerGeometry, scannerMaterial);
-  group.add(scanner);
-
-  // Surface de scan
-  const scanSurfaceGeometry = new THREE.BoxGeometry(0.5, 0.3, 0.02);
-  const scanSurfaceMaterial = new THREE.MeshPhysicalMaterial({
-    color: '#4299e1',
-    transmission: 0.7,
-    roughness: 0.1
-  });
-
-  const scanSurface = new THREE.Mesh(scanSurfaceGeometry, scanSurfaceMaterial);
-  scanSurface.position.z = 0.16;
-  group.add(scanSurface);
-
-  return group;
-};
-
-const createMetalDetector = (position: [number, number, number]) => {
-  const group = new THREE.Group();
-  group.position.set(...position);
-  group.userData = { type: 'metal-detector', isInteractive: true };
-
-  // Arches
-  const archGeometry = new THREE.BoxGeometry(0.2, 3, 0.2);
-  const archMaterial = new THREE.MeshStandardMaterial({
-    color: '#4299e1',
-    metalness: 0.7
-  });
-
-  const leftArch = new THREE.Mesh(archGeometry, archMaterial);
-  leftArch.position.set(-1.5, 1.5, 0);
-  group.add(leftArch);
-
-  const rightArch = leftArch.clone();
-  rightArch.position.x = 1.5;
-  group.add(rightArch);
-
-  // Arche supérieure
-  const topArchGeometry = new THREE.BoxGeometry(3.2, 0.2, 0.2);
-  const topArch = new THREE.Mesh(topArchGeometry, archMaterial);
-  topArch.position.set(0, 3, 0);
-  group.add(topArch);
-
-  // Détecteur
-  const detectorGeometry = new THREE.BoxGeometry(0.4, 0.4, 0.4);
-  const detectorMaterial = new THREE.MeshStandardMaterial({
-    color: '#e53e3e',
-    emissive: '#e53e3e',
-    emissiveIntensity: 0.3
-  });
-
-  const detector = new THREE.Mesh(detectorGeometry, detectorMaterial);
-  detector.position.set(0, 2, 0);
-  detector.userData = { isSecurityLED: true };
-  group.add(detector);
-
-  return group;
-};
-
-const createTurnstile = (position: [number, number, number], isActive: boolean = true) => {
-  const group = new THREE.Group();
-  group.position.set(...position);
-  group.userData = { type: 'turnstile', isActive, isInteractive: true };
-
-  // Base
-  const baseGeometry = new THREE.CylinderGeometry(0.4, 0.4, 1, 8);
-  const baseMaterial = new THREE.MeshStandardMaterial({
-    color: '#4a5568',
-    metalness: 0.7
-  });
-
-  const base = new THREE.Mesh(baseGeometry, baseMaterial);
-  group.add(base);
-
-  // Barres
-  const barGeometry = new THREE.BoxGeometry(0.8, 0.05, 0.05);
-  const barMaterial = new THREE.MeshStandardMaterial({
-    color: isActive ? '#e53e3e' : '#a0aec0',
-    emissive: isActive ? '#e53e3e' : undefined,
-    emissiveIntensity: isActive ? 0.5 : 0
-  });
-
-  for (let i = 0; i < 3; i++) {
-    const bar = new THREE.Mesh(barGeometry, barMaterial);
-    bar.rotation.y = (i * Math.PI * 2) / 3;
-    bar.userData = { isSecurityLED: isActive };
-    group.add(bar);
+    grp.add(coolingUnit);
   }
 
-  // Indicateur d'accès
-  const indicatorGeometry = new THREE.SphereGeometry(0.1, 8, 8);
-  const indicatorMaterial = new THREE.MeshStandardMaterial({
-    color: isActive ? '#38a169' : '#e53e3e',
-    emissive: isActive ? '#38a169' : '#e53e3e',
-    emissiveIntensity: 0.8
-  });
-
-  const indicator = new THREE.Mesh(indicatorGeometry, indicatorMaterial);
-  indicator.position.y = 1.2;
-  group.add(indicator);
-
-  return group;
-};
-
-const createFireSuppressionSystem = () => {
-  const group = new THREE.Group();
-  group.name = 'fire-suppression';
-
-  // Sprinklers au plafond
-  for (let x = -30; x <= 30; x += 10) {
-    for (let z = -30; z <= 30; z += 10) {
-      const sprinkler = createSprinkler([x, 6.8, z]);
-      group.add(sprinkler);
+  /* Réservoirs d'eau */
+  const createWaterTank = (pos: [number, number, number]) => {
+    const tank = new THREE.Group();
+    
+    const tankBody = new THREE.Mesh(
+      new THREE.CylinderGeometry(3, 3, 6, 16),
+      new THREE.MeshStandardMaterial({ 
+        color: '#3182ce',
+        metalness: 0.9,
+        roughness: 0.1
+      })
+    );
+    tankBody.position.y = 3;
+    
+    const legs = [];
+    for (let j = 0; j < 4; j++) {
+      const leg = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.2, 0.2, 3, 8),
+        new THREE.MeshStandardMaterial({ color: '#4a5568' })
+      );
+      leg.position.set(
+        Math.cos(j * Math.PI / 2) * 2.5,
+        1.5,
+        Math.sin(j * Math.PI / 2) * 2.5
+      );
+      legs.push(leg);
     }
+    
+    tank.add(tankBody, ...legs);
+    tank.position.set(...pos);
+
+    tank.userData = {
+      type: 'equipment',
+      equipmentType: 'water_tank',
+      equipmentId: `water-tank-${pos[0] > 0 ? 'east' : 'west'}`,
+      status: 'active',
+      capacity: '50000L'
+    };
+
+    return tank;
+  };
+
+  grp.add(createWaterTank([-80, 0, 0]));
+  grp.add(createWaterTank([80, 0, 0]));
+
+  return grp;
+};
+
+/* ------------------------------------------------------------- */
+/* 5. SÉCURITÉ AVANCÉE                                           */
+/* ------------------------------------------------------------- */
+const createAdvancedSecurity = () => {
+  const grp = new THREE.Group();
+
+  /* Tours de guet */
+  const createWatchTower = (pos: [number, number, number]) => {
+    const tower = new THREE.Group();
+    
+    const foundation = new THREE.Mesh(
+      new THREE.CylinderGeometry(4, 5, 1, 8),
+      new THREE.MeshStandardMaterial({ color: '#2d3748' })
+    );
+    foundation.position.y = 0.5;
+    
+    const towerBody = new THREE.Mesh(
+      new THREE.CylinderGeometry(3, 4, 15, 8),
+      new THREE.MeshStandardMaterial({ color: '#4a5568' })
+    );
+    towerBody.position.y = 8;
+    
+    const observation = new THREE.Mesh(
+      new THREE.BoxGeometry(5, 3, 5),
+      new THREE.MeshPhysicalMaterial({
+        color: '#e6fffa',
+        transmission: 0.8,
+        thickness: 0.5,
+        transparent: true,
+        opacity: 0.9
+      })
+    );
+    observation.position.y = 16;
+    
+    const roof = new THREE.Mesh(
+      new THREE.ConeGeometry(3, 2, 8),
+      new THREE.MeshStandardMaterial({ color: '#2d3748' })
+    );
+    roof.position.y = 18.5;
+    
+    /* Gyrophare */
+    const beacon = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.5, 0.5, 0.8, 16),
+      new THREE.MeshStandardMaterial({
+        color: '#f59e0b',
+        emissive: '#f59e0b',
+        emissiveIntensity: 1
+      })
+    );
+    beacon.position.y = 19.5;
+    beacon.userData = { led: true, emergency: true };
+    
+    /* Projecteurs */
+    for (let i = 0; i < 4; i++) {
+      const spotlight = new THREE.Mesh(
+        new THREE.ConeGeometry(0.5, 1.5, 8),
+        new THREE.MeshStandardMaterial({ color: '#f6e05e' })
+      );
+      spotlight.position.set(
+        Math.cos(i * Math.PI / 2) * 2.5,
+        17,
+        Math.sin(i * Math.PI / 2) * 2.5
+      );
+      spotlight.lookAt(
+        Math.cos(i * Math.PI / 2) * 50,
+        0,
+        Math.sin(i * Math.PI / 2) * 50
+      );
+      tower.add(spotlight);
+    }
+    
+    tower.add(foundation, towerBody, observation, roof, beacon);
+    tower.position.set(...pos);
+    return tower;
+  };
+
+  const towerPositions: [number, number, number][] = [
+    [-90, 0, -90], [90, 0, -90], [-90, 0, 90], [90, 0, 90]
+  ];
+  towerPositions.forEach(pos => grp.add(createWatchTower(pos)));
+
+  /* Borne anti-intrusion */
+  const createBollard = (pos: [number, number, number]) => {
+    const bollard = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.4, 0.4, 1.5, 16),
+      new THREE.MeshStandardMaterial({
+        color: '#e53e3e',
+        metalness: 0.9
+      })
+    );
+    bollard.position.set(...pos);
+    
+    const topLight = new THREE.Mesh(
+      new THREE.SphereGeometry(0.2, 16, 16),
+      new THREE.MeshStandardMaterial({
+        color: '#ffffff',
+        emissive: '#ffffff',
+        emissiveIntensity: 0.5
+      })
+    );
+    topLight.position.y = 0.9;
+    bollard.add(topLight);
+    
+    return bollard;
+  };
+
+  /* Ligne de bornes */
+  for (let i = -8; i <= 8; i++) {
+    if (i === 0) continue;
+    grp.add(createBollard([i * 2, 0, 78]));
+    grp.add(createBollard([i * 2, 0, -78]));
   }
 
-  // Alimentation principale
-  const mainPipeGeometry = new THREE.CylinderGeometry(0.15, 0.15, 70, 8);
-  const mainPipeMaterial = new THREE.MeshStandardMaterial({
-    color: '#e53e3e',
-    metalness: 0.8
-  });
+  /* Système de reconnaissance de plaques */
+  const createLicensePlateReader = (pos: [number, number, number]) => {
+    const reader = new THREE.Group();
+    
+    const pole = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.15, 0.15, 3, 8),
+      new THREE.MeshStandardMaterial({ color: '#2d3748' })
+    );
+    pole.position.y = 1.5;
+    
+    const camera = new THREE.Mesh(
+      new THREE.BoxGeometry(0.4, 0.3, 0.2),
+      new THREE.MeshStandardMaterial({ color: '#000000' })
+    );
+    camera.position.set(0, 3, 0.2);
+    camera.userData = { camera: true };
+    
+    const irLight = new THREE.Mesh(
+      new THREE.SphereGeometry(0.1, 8, 8),
+      new THREE.MeshStandardMaterial({
+        color: '#0000ff',
+        emissive: '#0000ff'
+      })
+    );
+    irLight.position.set(0, 3, -0.2);
+    
+    reader.add(pole, camera, irLight);
+    reader.position.set(...pos);
+    return reader;
+  };
 
-  const mainPipe = new THREE.Mesh(mainPipeGeometry, mainPipeMaterial);
-  mainPipe.position.set(0, 6.5, 0);
-  mainPipe.rotation.z = Math.PI / 2;
-  group.add(mainPipe);
+  grp.add(createLicensePlateReader([0, 0, 72]));
+  grp.add(createLicensePlateReader([0, 0, -72]));
 
-  return group;
+  return grp;
 };
 
-const createSprinkler = (position: [number, number, number]) => {
-  const group = new THREE.Group();
-  group.position.set(...position);
+/* ------------------------------------------------------------- */
+/* 6. VÉHICULES ET ÉQUIPEMENTS                                  */
+/* ------------------------------------------------------------- */
+const createVehiclesAndEquipment = () => {
+  const grp = new THREE.Group();
 
-  const sprinklerGeometry = new THREE.CylinderGeometry(0.1, 0.15, 0.3, 8);
-  const sprinklerMaterial = new THREE.MeshStandardMaterial({
-    color: '#e53e3e',
-    metalness: 0.8
+  /* Véhicule de patrouille */
+  const patrolCar = new THREE.Group();
+  
+  const chassis = new THREE.Mesh(
+    new THREE.BoxGeometry(4, 1.2, 2),
+    new THREE.MeshStandardMaterial({ color: '#1a202c' })
+  );
+  chassis.position.y = 0.6;
+  
+  const cabin = new THREE.Mesh(
+    new THREE.BoxGeometry(3, 1.2, 1.8),
+    new THREE.MeshStandardMaterial({ color: '#2d3748' })
+  );
+  cabin.position.set(0, 1.2, 0);
+  
+  const wheelGeometry = new THREE.CylinderGeometry(0.4, 0.4, 0.3, 16);
+  const wheelMaterial = new THREE.MeshStandardMaterial({ color: '#000000' });
+  
+  const wheelPositions = [
+    [-1.2, 0.4, 0.9] as [number, number, number], [1.2, 0.4, 0.9],
+    [-1.2, 0.4, -0.9] as [number, number, number], [1.2, 0.4, -0.9]
+  ] as [number, number, number][];
+
+  wheelPositions.forEach(pos => {
+    const wheel = new THREE.Mesh(wheelGeometry, wheelMaterial);
+    wheel.position.set(...pos);
+    wheel.rotation.z = Math.PI / 2;
+    patrolCar.add(wheel);
   });
+  
+  const lightbar = new THREE.Mesh(
+    new THREE.BoxGeometry(2, 0.3, 0.5),
+    new THREE.MeshStandardMaterial({
+      color: '#0000ff',
+      emissive: '#0000ff',
+      emissiveIntensity: 0.8
+    })
+  );
+  lightbar.position.set(0, 2, 0);
+  lightbar.userData = { led: true, phase: 0 };
+  
+  patrolCar.add(chassis, cabin, lightbar);
+  patrolCar.position.set(0, 0, 60);
+  patrolCar.userData = {
+    type: 'equipment',
+    equipmentType: 'security_vehicle',
+    equipmentId: 'patrol-car-1',
+    status: 'active',
+    patrol: true
+  };
 
-  const sprinkler = new THREE.Mesh(sprinklerGeometry, sprinklerMaterial);
-  group.add(sprinkler);
+  grp.add(patrolCar);
 
-  return group;
-};
+  /* Camion de livraison */
+  const deliveryTruck = new THREE.Group();
+  
+  const truckChassis = new THREE.Mesh(
+    new THREE.BoxGeometry(6, 1.5, 2.5),
+    new THREE.MeshStandardMaterial({ color: '#e53e3c' })
+  );
+  truckChassis.position.y = 0.75;
+  
+  const truckCabin = new THREE.Mesh(
+    new THREE.BoxGeometry(2.5, 2, 2.5),
+    new THREE.MeshStandardMaterial({ color: '#2d3748' })
+  );
+  truckCabin.position.set(-1.5, 1.75, 0);
+  
+  const container = new THREE.Mesh(
+    new THREE.BoxGeometry(4, 2.5, 2.5),
+    new THREE.MeshStandardMaterial({ color: '#cbd5e0' })
+  );
+  container.position.set(1.5, 1.5, 0);
+  
+  const truckWheelPositions = [
+    [-2, 0.4, 1.1] as [number, number, number], [0.8, 0.4, 1.1], [3, 0.4, 1.1],
+    [-2, 0.4, -1.1] as [number, number, number], [0.8, 0.4, -1.1], [3, 0.4, -1.1]
+  ] as [number, number, number][];
 
-const createSmokeDetector = (position: [number, number, number]) => {
-  const group = new THREE.Group();
-  group.position.set(...position);
-  group.userData = { type: 'smoke-detector', isInteractive: true };
-
-  const detectorGeometry = new THREE.CylinderGeometry(0.05, 0.05, 0.1, 8);
-  const detectorMaterial = new THREE.MeshStandardMaterial({
-    color: '#ffffff',
-    emissive: '#ff0000',
-    emissiveIntensity: 0.5
+  truckWheelPositions.forEach(pos => {
+    const wheel = new THREE.Mesh(wheelGeometry, wheelMaterial);
+    wheel.position.set(...pos);
+    wheel.rotation.z = Math.PI / 2;
+    deliveryTruck.add(wheel);
   });
+  
+  deliveryTruck.add(truckChassis, truckCabin, container);
+  deliveryTruck.position.set(-40, 0, 65);
 
-  const detector = new THREE.Mesh(detectorGeometry, detectorMaterial);
-  group.add(detector);
+  deliveryTruck.userData = {
+    type: 'equipment',
+    equipmentType: 'delivery_vehicle',
+    equipmentId: 'delivery-truck-1',
+    status: 'active',
+    loadCapacity: '10 tons'
+  };
 
-  return group;
-};
+  grp.add(deliveryTruck);
 
-const createFireExtinguisher = (position: [number, number, number]) => {
-  const group = new THREE.Group();
-  group.position.set(position[0], position[1], position[2]);
-  group.userData = { type: 'fire-extinguisher', isInteractive: true };
+  /* Chariot élévateur */
+  const forklift = new THREE.Group();
+  
+  const forkliftBase = new THREE.Mesh(
+    new THREE.BoxGeometry(2, 1, 1.2),
+    new THREE.MeshStandardMaterial({ color: '#f59e0b' })
+  );
+  forkliftBase.position.y = 0.5;
+  
+  const mast = new THREE.Mesh(
+    new THREE.BoxGeometry(0.3, 3, 0.3),
+    new THREE.MeshStandardMaterial({ color: '#4a5568' })
+  );
+  mast.position.set(0, 2, 0.4);
+  
+  const forks = new THREE.Mesh(
+    new THREE.BoxGeometry(0.2, 0.1, 1),
+    new THREE.MeshStandardMaterial({ color: '#718096' })
+  );
+  forks.position.set(0, 0.5, 0.8);
+  
+  const forkliftWheelPositions = [
+    [-0.6, 0.2, 0.4] as [number, number, number], [0.6, 0.2, 0.4],
+    [-0.6, 0.2, -0.4] as [number, number, number], [0.6, 0.2, -0.4]
+  ] as [number, number, number][];
 
-  const extinguisherGeometry = new THREE.CylinderGeometry(0.1, 0.1, 1, 8);
-  const extinguisherMaterial = new THREE.MeshStandardMaterial({
-    color: '#ff0000',
-    metalness: 0.7
+  forkliftWheelPositions.forEach(pos => {
+    const wheel = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.25, 0.25, 0.2, 16),
+      wheelMaterial
+    );
+    wheel.position.set(...pos);
+    wheel.rotation.z = Math.PI / 2;
+    forklift.add(wheel);
   });
+  
+  forklift.add(forkliftBase, mast, forks);
+  forklift.position.set(30, 0, 65);
 
-  const extinguisher = new THREE.Mesh(extinguisherGeometry, extinguisherMaterial);
-  group.add(extinguisher);
+  forklift.userData = {
+    type: 'equipment',
+    equipmentType: 'forklift',
+    equipmentId: 'forklift-1',
+    status: 'active',
+    liftCapacity: '5 tons'
+  };
 
-  return group;
+  grp.add(forklift);
+
+  return grp;
 };
 
 export default DataCenterGenerator;

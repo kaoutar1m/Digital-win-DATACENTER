@@ -1,44 +1,80 @@
-import React, { useRef, useEffect, useState } from 'react';
+// components/CameraControls/CameraControls.tsx
+import React, { useRef, useEffect, useImperativeHandle, forwardRef } from 'react';
+import * as THREE from 'three';
 import { useThree, useFrame } from '@react-three/fiber';
-import { CameraControls as CameraControlsImpl } from '@react-three/drei';
+import { CameraControls as CameraControlsDrei } from '@react-three/drei';
 import type { CameraControls as CameraControlsType } from '@react-three/drei';
 
-const cameraPresets = {
-  overview: { position: [0, 50, 80], target: [0, 0, 0] },
-  entrance: { position: [0, 5, 60], target: [0, 5, 0] },
-  rackRow1: { position: [-20, 3, 0], target: [-20, 3, -10] },
-  criticalZone: { position: [30, 4, 20], target: [30, 4, 0] },
-  securityRoom: { position: [40, 3, -30], target: [0, 3, -30] }
-};
+export interface CameraControlsRef {
+  flyTo: (name: keyof typeof presets) => void;
+  startPanorama: () => void;
+  stopPanorama: () => void;
+}
 
-const CameraControls = ({ preset, onArrive, isPanoramaMode = false }: any) => {
-  const controls = useRef<CameraControlsType>(null);
-  const { camera } = useThree();
-  const [rotation, setRotation] = useState(0);
+const presets = {
+  overview:    { pos: [0, 35, 80] as [number, number, number],    target: [0, 8, 0] as [number, number, number] },
+  entrance:    { pos: [0, 6, 50] as [number, number, number],    target: [0, 5, 0] as [number, number, number] },
+  processing:  { pos: [-25, 8, -15] as [number, number, number], target: [-25, 4, -15] as [number, number, number] },
+  storage:     { pos: [25, 8, -15] as [number, number, number],  target: [25, 4, -15] as [number, number, number] },
+  distribution:{ pos: [-25, 8, 15] as [number, number, number], target: [-25, 4, 15] as [number, number, number] },
+  security:    { pos: [25, 8, 15] as [number, number, number],   target: [25, 4, 15] as [number, number, number] },
+  roof:        { pos: [0, 45, 0] as [number, number, number],    target: [0, 15, 0] as [number, number, number] },
+} as const;
 
-  useEffect(() => {
-    if (preset && controls.current && !isPanoramaMode) {
-      const { position, target } = cameraPresets[preset];
-      controls.current.setPosition(position[0], position[1], position[2], true);
-      controls.current.setTarget(target[0], target[1], target[2], true);
-      onArrive?.();
-    }
-  }, [preset, isPanoramaMode]);
 
-  useFrame((state) => {
-    if (isPanoramaMode) {
-      setRotation(prev => prev + 0.002);
-      state.camera.position.x = Math.cos(rotation) * 40;
-      state.camera.position.z = Math.sin(rotation) * 40;
-      state.camera.lookAt(0, 5, 0);
+const CameraControls = forwardRef<CameraControlsRef, {}>((_, ref) => {
+  const controls = useRef<CameraControlsType>(null!);
+  const { camera, gl } = useThree();
+  const [autoRotate, setAutoRotate] = React.useState(true);
+  const angle = useRef(0);
+
+  /* expose commands au parent */
+  useImperativeHandle(ref, () => ({
+    flyTo: (name) => {
+      const { pos, target } = presets[name];
+      controls.current.setLookAt(...pos, ...target, true);
+      setAutoRotate(false);
+    },
+    startPanorama: () => setAutoRotate(true),
+    stopPanorama: () => setAutoRotate(false),
+  }));
+
+  /* panoramique automatique jusqu’à interaction */
+  useFrame((state, delta) => {
+    if (autoRotate) {
+      angle.current += delta * 0.1;
+      const x = Math.cos(angle.current) * 60;
+      const z = Math.sin(angle.current) * 60;
+      camera.position.lerp(new THREE.Vector3(x, 25, z), 0.02);
+      camera.lookAt(0, 5, 0);
     }
   });
 
-  if (isPanoramaMode) {
-    return null; // Panorama mode doesn't use controls
-  }
+  /* stop auto-rotate dès que l’utilisateur interagit */
+  useEffect(() => {
+    const onInteraction = () => setAutoRotate(false);
+    const domElement = gl.domElement;
+    domElement.addEventListener('pointerdown', onInteraction);
+    domElement.addEventListener('wheel', onInteraction);
+    return () => {
+      domElement.removeEventListener('pointerdown', onInteraction);
+      domElement.removeEventListener('wheel', onInteraction);
+    };
+  }, [gl]);
 
-  return <CameraControlsImpl ref={controls} />;
-};
+  return (
+    <CameraControlsDrei
+      ref={controls}
+      minDistance={5}
+      maxDistance={150}
+      smoothTime={0.3}
+      azimuthRotateSpeed={-0.3}
+      polarRotateSpeed={-0.3}
+      dollySpeed={1.5}
+      truckSpeed={2}
+    />
+  );
+});
 
+CameraControls.displayName = 'CameraControls';
 export default CameraControls;

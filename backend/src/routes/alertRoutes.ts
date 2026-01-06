@@ -5,36 +5,48 @@ import Joi from 'joi';
 const router = Router();
 
 const alertSchema = Joi.object({
-  sensor_id: Joi.string().uuid().optional(),
-  rack_id: Joi.string().uuid().optional(),
+  title: Joi.string().min(3).max(255).required(),
+  description: Joi.string().max(1000).optional(),
   type: Joi.string()
-    .valid('temperature', 'humidity', 'power', 'smoke', 'motion', 'door', 'security', 'access')
+    .valid('temperature', 'humidity', 'power', 'smoke', 'motion', 'door', 'security', 'access', 'network', 'hardware', 'software', 'environmental')
     .required(),
-  message: Joi.string().min(5).max(500).required(),
-  severity: Joi.string().valid('low', 'medium', 'high', 'critical').default('medium')
+  severity: Joi.string().valid('low', 'medium', 'high', 'critical').default('medium'),
+  source: Joi.string().max(100).optional(),
+  zone_id: Joi.string().uuid().optional(),
+  equipment_id: Joi.string().max(100).optional(),
+  metadata: Joi.object().optional()
 });
 
 const alertUpdateSchema = Joi.object({
-  resolved: Joi.boolean().required()
+  status: Joi.string().valid('active', 'acknowledged', 'resolved', 'escalated').optional(),
+  acknowledged: Joi.boolean().optional(),
+  acknowledged_by: Joi.string().uuid().optional(),
+  resolved_at: Joi.date().optional(),
+  metadata: Joi.object().optional()
 });
 
-// GET all alerts
+// GET all alerts with advanced filtering
 router.get('/', async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
   try {
-    const { resolved, severity, rack_id, start_date, end_date } = req.query;
+    const {
+      status, severity, type, zone_id, equipment_id, source,
+      acknowledged, start_date, end_date, search, limit = '50', offset = '0'
+    } = req.query;
 
     let query = `
-      SELECT a.*
+      SELECT a.*, z.name as zone_name, e.type as equipment_type
       FROM alerts a
+      LEFT JOIN zones z ON a.zone_id = z.id
+      LEFT JOIN equipment e ON a.equipment_id = e.id
       WHERE 1=1
     `;
 
     const params: unknown[] = [];
     let i = 1;
 
-    if (resolved === 'true' || resolved === 'false') {
-      query += ` AND a.resolved = $${i++}`;
-      params.push(resolved === 'true');
+    if (status) {
+      query += ` AND a.status = $${i++}`;
+      params.push(status);
     }
 
     if (severity) {
@@ -42,9 +54,29 @@ router.get('/', async (req: Request, res: Response, next: NextFunction): Promise
       params.push(severity);
     }
 
-    if (rack_id) {
-      query += ` AND a.rack_id = $${i++}`;
-      params.push(rack_id);
+    if (type) {
+      query += ` AND a.type = $${i++}`;
+      params.push(type);
+    }
+
+    if (zone_id) {
+      query += ` AND a.zone_id = $${i++}`;
+      params.push(zone_id);
+    }
+
+    if (equipment_id) {
+      query += ` AND a.equipment_id = $${i++}`;
+      params.push(equipment_id);
+    }
+
+    if (source) {
+      query += ` AND a.source = $${i++}`;
+      params.push(source);
+    }
+
+    if (acknowledged === 'true' || acknowledged === 'false') {
+      query += ` AND a.acknowledged = $${i++}`;
+      params.push(acknowledged === 'true');
     }
 
     if (start_date) {
@@ -57,7 +89,13 @@ router.get('/', async (req: Request, res: Response, next: NextFunction): Promise
       params.push(new Date(end_date as string));
     }
 
-    query += ` ORDER BY a.created_at DESC`;
+    if (search) {
+      query += ` AND (a.title ILIKE $${i++} OR a.description ILIKE $${i++} OR a.type ILIKE $${i++})`;
+      params.push(`%${search}%`, `%${search}%`, `%${search}%`);
+    }
+
+    query += ` ORDER BY a.created_at DESC LIMIT $${i++} OFFSET $${i++}`;
+    params.push(parseInt(limit as string), parseInt(offset as string));
 
     const result = await pool.query(query, params);
     return res.json(result.rows);
@@ -74,17 +112,13 @@ router.post('/', async (req: Request, res: Response, next: NextFunction): Promis
       return res.status(400).json({ error: error.message });
     }
 
-    const { sensor_id, rack_id, type, message, severity } = value;
-
-    if (!sensor_id && !rack_id) {
-      return res.status(400).json({ error: 'sensor_id or rack_id is required' });
-    }
+    const { title, description, type, severity, source, zone_id, equipment_id, metadata } = value;
 
     const result = await pool.query(
-      `INSERT INTO alerts (sensor_id, rack_id, type, message, severity)
-       VALUES ($1, $2, $3, $4, $5)
+      `INSERT INTO alerts (title, description, type, severity, source, zone_id, equipment_id, metadata)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
        RETURNING *`,
-      [sensor_id ?? null, rack_id ?? null, type, message, severity]
+      [title, description || null, type, severity, source || null, zone_id || null, equipment_id || null, metadata || null]
     );
 
     return res.status(201).json(result.rows[0]);

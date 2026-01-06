@@ -1,4 +1,5 @@
 import { Pool } from 'pg';
+import 'dotenv/config';
 declare const pool: Pool;
 interface Sensor {
     id: number;

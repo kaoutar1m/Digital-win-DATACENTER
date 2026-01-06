@@ -1,8 +1,8 @@
 export interface Zone {
-  id: string;
+  id: number;
   name: string;
-  security_level: 'public' | 'restricted' | 'sensitive' | 'critical';
+  security_level: string;
   color: string;
-  position: { x: number; y: number; z: number };
+  position: any; // JSONB from database
   created_at: Date;
 }

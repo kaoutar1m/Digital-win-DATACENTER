@@ -5,7 +5,8 @@ import { useAlertSystem, alertColors } from '../hooks/useAlertSystem';
 const AlertFeed: React.FC = () => {
   const { alerts, acknowledgeAlert } = useAlertSystem();
 
-  const formatTime = (date: Date) => {
+  const formatTime = (timestamp: string | number | Date) => {
+    const date = new Date(timestamp);
     return new Intl.DateTimeFormat('en-US', {
       hour: '2-digit',
       minute: '2-digit',

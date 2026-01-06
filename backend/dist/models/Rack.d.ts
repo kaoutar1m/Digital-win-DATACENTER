@@ -3,6 +3,10 @@ export interface Rack {
     zone_id?: string;
     name: string;
     status: string;
+    size_u: number;
+    location: string;
+    total_power_capacity: number;
+    total_cooling_capacity: number;
     temperature?: number;
     power_usage?: number;
     model_path?: string;
@@ -21,5 +25,22 @@ export interface Rack {
         y: number;
         z: number;
     };
+    created_at: Date;
+    updated_at: Date;
+}
+export interface RackLayout {
+    rack_id: string;
+    equipment: Array<{
+        id: string;
+        name: string;
+        type: string;
+        position_u: number;
+        size_u: number;
+        power_consumption: number;
+        status: string;
+    }>;
+    total_power: number;
+    available_u: number;
+    utilization_percentage: number;
 }
 //# sourceMappingURL=Rack.d.ts.map

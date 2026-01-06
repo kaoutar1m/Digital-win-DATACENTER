@@ -1,4 +1,5 @@
-import { Pool } from 'pg';
-export declare const pool: Pool;
-export default pool;
+export declare const connectDatabase: () => Promise<void>;
+export declare const disconnectDatabase: () => Promise<void>;
+export declare const checkDatabaseHealth: () => Promise<boolean>;
+export declare const initializeMockData: () => Promise<void>;
 //# sourceMappingURL=connection.d.ts.map

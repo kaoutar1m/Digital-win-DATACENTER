@@ -27,10 +27,10 @@ export const useDataCenterStats = () => {
     // Demander les statistiques initiales
     socket.emit('stats:request');
 
-    // Timeout pour éviter un chargement infini
+    // Timeout to avoid infinite loading
     const timeoutId = setTimeout(() => {
       if (loading) {
-        setError('Timeout lors de la récupération des statistiques');
+        setError('Timeout while retrieving statistics');
         setLoading(false);
       }
     }, 5000);
@@ -39,7 +39,7 @@ export const useDataCenterStats = () => {
       socket.off('stats:update', handleStatsUpdate);
       clearTimeout(timeoutId);
     };
-  }, [socket, isConnected, loading]);
+  }, [socket, isConnected]);
 
   return { stats, loading, error };
 };

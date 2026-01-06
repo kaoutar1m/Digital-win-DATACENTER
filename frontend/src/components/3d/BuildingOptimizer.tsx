@@ -1,7 +1,11 @@
-import React, { useRef, useEffect } from 'react';
-import { useLoader } from '@react-three/fiber';
+import React, { useRef, useEffect, useMemo } from 'react';
+import { useLoader, useFrame } from '@react-three/fiber';
 import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
 import * as THREE from 'three';
+
+/* ------------------------------------------------------------------ */
+/*  BUILDING OPTIMIZER – design « infographics » – matériaux réels    */
+/* ------------------------------------------------------------------ */
 
 const BuildingOptimizer: React.FC = () => {
   const buildingRef = useRef<THREE.Group>(null);
@@ -9,148 +13,126 @@ const BuildingOptimizer: React.FC = () => {
   // Charger le modèle OBJ
   const obj = useLoader(OBJLoader, '/models/building/base.obj');
 
-  // Créer des matériaux personnalisés pour remplacer ceux manquants
+  // Matériaux réalistes
+  const materials = useMemo(() => ({
+    concrete: new THREE.MeshStandardMaterial({
+      color: '#3c3c3c',
+      roughness: 0.9,
+      metalness: 0.1,
+      normalScale: new THREE.Vector2(0.5, 0.5),
+    }),
+    glass: new THREE.MeshPhysicalMaterial({
+      color: '#cce4ff',
+      transmission: 0.8,
+      thickness: 1.2,
+      roughness: 0.05,
+      metalness: 0,
+      ior: 1.5,
+    }),
+    steel: new THREE.MeshStandardMaterial({
+      color: '#a0a0a0',
+      metalness: 0.9,
+      roughness: 0.25,
+    }),
+    led: new THREE.MeshStandardMaterial({
+      color: '#00ffff',
+      emissive: '#00ffff',
+      emissiveIntensity: 1,
+    }),
+  }), []);
+
   useEffect(() => {
     if (!obj || !buildingRef.current) return;
 
-    const customMaterials = {
-      concrete: new THREE.MeshStandardMaterial({
-        color: '#2d3748',
-        roughness: 0.8,
-        metalness: 0.2,
-        name: 'concrete'
-      }),
-      glass: new THREE.MeshPhysicalMaterial({
-        color: '#1e293b',
-        transmission: 0.7,
-        thickness: 2.5,
-        roughness: 0.1,
-        metalness: 0.9,
-        ior: 2.5,
-        name: 'glass'
-      }),
-      metal: new THREE.MeshStandardMaterial({
-        color: '#4a5568',
-        metalness: 0.9,
-        roughness: 0.3,
-        name: 'metal'
-      })
-    };
-
-    // Traverser la scène et appliquer les matériaux appropriés
-    obj.traverse((child) => {
-      if (child instanceof THREE.Mesh) {
-        // Configuration des ombres
+    obj.traverse((child: any) => {
+      if (child.isMesh) {
         child.castShadow = true;
         child.receiveShadow = true;
 
-        // Identifier le type de matériau par nom ou propriétés
-        const childName = child.name.toLowerCase();
+        const name = child.name.toLowerCase();
+        if (name.includes('glass')) child.material = materials.glass;
+        else if (name.includes('steel') || name.includes('frame')) child.material = materials.steel;
+        else child.material = materials.concrete;
 
-        if (childName.includes('glass') || childName.includes('vitre') || childName.includes('window')) {
-          child.material = customMaterials.glass;
-        } else if (childName.includes('metal') || childName.includes('acier') || childName.includes('frame')) {
-          child.material = customMaterials.metal;
-        } else if (childName.includes('concrete') || childName.includes('beton') || childName.includes('wall')) {
-          child.material = customMaterials.concrete;
-        }
-
-        // Forcer la mise à jour
         child.material.needsUpdate = true;
       }
     });
 
-    // Organiser la scène en groupes logiques
-    const structureGroup = new THREE.Group();
-    const facadeGroup = new THREE.Group();
-    const detailsGroup = new THREE.Group();
-
-    obj.traverse((child) => {
-      const name = child.name.toLowerCase();
-
-      if (name.includes('structure') || name.includes('pillar') || name.includes('column')) {
-        structureGroup.add(child.clone());
-      } else if (name.includes('facade') || name.includes('exterior') || name.includes('wall')) {
-        facadeGroup.add(child.clone());
-      } else if (name.includes('detail') || name.includes('vent') || name.includes('cooling')) {
-        detailsGroup.add(child.clone());
-      }
-    });
-
-    buildingRef.current.add(structureGroup, facadeGroup, detailsGroup);
-
-  }, [obj]);
+    buildingRef.current.add(obj);
+  }, [obj, materials]);
 
   return (
     <group ref={buildingRef}>
-      {/* Le modèle OBJ chargé automatiquement avec nos optimisations */}
-      {obj && <primitive object={obj} />}
-
-      {/* Ajouter les éléments manquants programmatiquement */}
-      <AdditionalBuildingElements />
+      <primitive object={obj} />
+      <BuildingAdditions materials={materials} />
     </group>
   );
 };
 
-// Composant pour ajouter les éléments manquants
-const AdditionalBuildingElements: React.FC = () => {
+/* ------------------------------------------------------------------ */
+/*  ÉLÉMENTS SUPPLÉMENTAIRES – refroidissement, signage, LEDs         */
+/* ------------------------------------------------------------------ */
+const BuildingAdditions: React.FC<{ materials: Record<string, THREE.Material> }> = ({ materials }) => {
+  const fanRef = useRef<THREE.Group>(null!);
+
+  useFrame((_, delta) => {
+    if (fanRef.current) fanRef.current.rotation.y += delta * 2;
+  });
+
+  const coolingPositions = useMemo(() => [...Array(8)].map((_, i) => [-30 + i * 8, 22, -20] as [number, number, number]), []);
+  const cameraPositions = useMemo(() => [
+    { pos: [-40, 15, -30] as [number, number, number], rotY: Math.PI / 4 },
+    { pos: [40, 15, -30] as [number, number, number], rotY: -Math.PI / 4 },
+    { pos: [-40, 15, 30] as [number, number, number], rotY: 3 * Math.PI / 4 },
+    { pos: [40, 15, 30] as [number, number, number], rotY: -3 * Math.PI / 4 },
+  ], []);
+
   return (
     <group>
-      {/* Unités de refroidissement sur le toit (si manquantes) */}
-      {[...Array(8)].map((_, i) => (
-        <mesh key={`cooling-${i}`} position={[-35 + i * 10, 18, -35]} castShadow receiveShadow>
-          <boxGeometry args={[8, 3, 8]} />
-          <meshStandardMaterial
-            color="#4a5568"
-            metalness={0.8}
-            roughness={0.4}
-          />
+            {/* Cooling units */}
+      {coolingPositions.map((pos, i) => (
+        <group key={`cool-${i}`} position={pos}>
+          <mesh castShadow receiveShadow>
+            <boxGeometry args={[6, 3, 6]} />
+            <meshStandardMaterial color="#4a5568" metalness={0.8} roughness={0.4} />
+          </mesh>
+          <group ref={i === 0 ? fanRef : undefined} position={[0, 1.5, 0]}>
+            <mesh>
+              <cylinderGeometry args={[2.5, 2.5, 0.2, 6]} />
+              <meshStandardMaterial color="#1a202c" />
+            </mesh>
+            <mesh position={[0, 1.5, 0]}>
+              <cylinderGeometry args={[0.1, 0.1, 0.3, 8]} />
+              <primitive object={materials.led} />
+            </mesh>
+          </group>
+        </group>
+      ))}
+
+      {/* 3D signage */}
+      {[-25, -8, 8, 25].map((x, i) => (
+        <mesh key={`sign-${i}`} position={[x, 18, 20.3]} rotation={[-0.1, 0, 0]}>
+          <boxGeometry args={[5, 1.5, 0.2]} />
+          <meshStandardMaterial color="#1e40af" emissive="#1e40af" emissiveIntensity={0.6} />
         </mesh>
       ))}
 
-      {/* Caméras de sécurité externes */}
-      {[
-        { pos: [-45, 12, -38] as [number, number, number], rot: [0, Math.PI / 4, 0] as [number, number, number] },
-        { pos: [45, 12, -38] as [number, number, number], rot: [0, -Math.PI / 4, 0] as [number, number, number] },
-        { pos: [-45, 12, 38] as [number, number, number], rot: [0, Math.PI * 3/4, 0] as [number, number, number] },
-        { pos: [45, 12, 38] as [number, number, number], rot: [0, -Math.PI * 3/4, 0] as [number, number, number] }
-      ].map((cam, i) => (
-        <SecurityCamera
-          key={`ext-camera-${i}`}
-          position={cam.pos}
-          rotation={cam.rot}
-        />
+      {/* LED strips façade */}
+      {[-20, -6, 6, 20].map((x, i) => (
+        <mesh key={`led-${i}`} position={[x, 16, 20.4]}>
+          <boxGeometry args={[0.3, 12, 0.2]} />
+          <primitive object={materials.led} />
+        </mesh>
       ))}
 
-      {/* Portes sécurisées */}
-      <mesh position={[0, 3, 38]} castShadow receiveShadow>
-        <boxGeometry args={[5, 6, 0.5]} />
-        <meshStandardMaterial
-          color="#1a365d"
-          metalness={0.9}
-          roughness={0.2}
-        />
+      {/* Entrance canopy */}
+      <mesh position={[0, 5, 32]} castShadow receiveShadow>
+        <boxGeometry args={[12, 0.3, 4]} />
+        <meshStandardMaterial color="#1a202c" metalness={0.8} />
       </mesh>
     </group>
   );
 };
 
-const SecurityCamera: React.FC<{ position: [number, number, number]; rotation: [number, number, number] }> = ({ position, rotation }) => (
-  <group position={position} rotation={rotation}>
-    <mesh castShadow receiveShadow>
-      <sphereGeometry args={[0.5, 16, 16]} />
-      <meshPhysicalMaterial
-        color="#2d3748"
-        transmission={0.9}
-        thickness={0.2}
-        roughness={0.1}
-      />
-    </mesh>
-    <mesh position={[0, 0, 0.4]} castShadow receiveShadow>
-      <cylinderGeometry args={[0.1, 0.15, 0.3]} />
-      <meshStandardMaterial color="#1a202c" metalness={0.9} />
-    </mesh>
-  </group>
-);
-
 export default BuildingOptimizer;
+

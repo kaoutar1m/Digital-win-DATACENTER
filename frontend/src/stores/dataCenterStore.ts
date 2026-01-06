@@ -51,10 +51,55 @@ interface AccessLog {
   timestamp: Date;
 }
 
+// Ajouter ces interfaces:
+export interface Equipment {
+  id: string;
+  rack_id: string;
+  type: 'server' | 'switch' | 'router' | 'storage' | 'ups' | 'cooling' | 'power';
+  model: string;
+  status: 'online' | 'offline' | 'warning' | 'critical' | 'maintenance';
+  metrics: {
+    temperature: number;
+    power_consumption: number;
+    load: number;
+    memory_usage: number;
+    storage_usage: number;
+    uptime: number;
+  };
+  alerts: string[];
+  ip_address?: string;
+  mac_address?: string;
+  vendor: string;
+  serial_number: string;
+  position: { x: number; y: number; z: number };
+  created_at: Date;
+  updated_at: Date;
+}
+
+interface Camera {
+  id: string;
+  zone_id: string;
+  type: 'fixed' | 'ptz' | 'thermal';
+  status: 'active' | 'inactive' | 'warning';
+  position: { x: number; y: number; z: number };
+  rotation: { x: number; y: number; z: number };
+  stream_url?: string;
+}
+
+interface BiometricLog {
+  id: string;
+  user_id: string;
+  type: 'fingerprint' | 'face' | 'card' | 'pin';
+  result: 'success' | 'failure';
+  timestamp: Date;
+  zone: string;
+}
+
 interface DataCenterState {
   zones: Zone[];
   racks: Rack[];
   sensors: Sensor[];
+  equipment: Equipment[];
   alerts: Alert[];
   accessLogs: AccessLog[];
   cameraPosition: { x: number; y: number; z: number };
@@ -65,6 +110,7 @@ interface DataCenterState {
   setZones: (zones: Zone[]) => void;
   setRacks: (racks: Rack[]) => void;
   setSensors: (sensors: Sensor[]) => void;
+  setEquipment: (equipment: Equipment[]) => void;
   addAlert: (alert: Alert) => void;
   addAccessLog: (log: AccessLog) => void;
   setCameraPosition: (position: { x: number; y: number; z: number }) => void;
@@ -77,6 +123,7 @@ export const useDataCenterStore = create<DataCenterState>()(
     zones: [],
     racks: [],
     sensors: [],
+    equipment: [],
     alerts: [],
     accessLogs: [],
     cameraPosition: { x: 20, y: 20, z: 20 },
@@ -86,6 +133,7 @@ export const useDataCenterStore = create<DataCenterState>()(
     setZones: (zones) => set({ zones }),
     setRacks: (racks) => set({ racks }),
     setSensors: (sensors) => set({ sensors }),
+    setEquipment: (equipment) => set({ equipment }),
     addAlert: (alert) => set((state) => ({ alerts: [...state.alerts, alert] })),
     addAccessLog: (log) => set((state) => ({ accessLogs: [...state.accessLogs, log] })),
     setCameraPosition: (position) => set({ cameraPosition: position }),

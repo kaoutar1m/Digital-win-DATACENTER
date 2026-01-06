@@ -19,20 +19,19 @@ const TemperatureHeatmap: React.FC<TemperatureHeatmapProps> = ({ data }) => {
   };
 
   return (
-    <div className="bg-white rounded-lg shadow-md p-6 border border-gray-200">
-      <h3 className="text-lg font-semibold text-gray-900 mb-4">Carte Thermique</h3>
+    <div className="bg-[#1E1E1E] rounded-lg p-6 border border-[#2D2D2D]">
       <div className="grid grid-cols-10 gap-1">
         {data.map((point, index) => (
           <div
             key={index}
-            className={`w-8 h-8 rounded ${getColor(point.temperature)} flex items-center justify-center text-xs font-medium`}
+            className={`w-8 h-8 rounded ${getColor(point.temperature)} flex items-center justify-center text-xs font-medium text-white`}
             title={`${point.temperature}°C`}
           >
             {point.temperature}
           </div>
         ))}
       </div>
-      <div className="mt-4 flex justify-between text-sm text-gray-600">
+      <div className="mt-4 flex justify-between text-sm text-gray-400">
         <span>Froid</span>
         <span>Optimal</span>
         <span>Chaud</span>

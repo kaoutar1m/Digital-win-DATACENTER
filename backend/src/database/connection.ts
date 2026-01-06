@@ -1,48 +1,49 @@
+
 import { Pool } from 'pg';
-import * as dotenv from 'dotenv';
+import dotenv from 'dotenv';
 
 dotenv.config();
 
-interface DatabaseConfig {
-  connectionString: string | undefined;
-  ssl: boolean | { rejectUnauthorized: boolean };
-  max: number;
-  idleTimeoutMillis: number;
-  connectionTimeoutMillis: number;
-}
+const DATABASE_URL = process.env.DATABASE_URL || 'postgresql://user:password@localhost:5432/datacenter3d';
 
-const poolConfig: DatabaseConfig = {
-  connectionString: process.env.DATABASE_URL,
-  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+export const pool = new Pool({
+  connectionString: DATABASE_URL,
   max: 20,
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 2000,
-};
-
-export const pool = new Pool(poolConfig);
-
-pool.on('connect', () => {
-  console.log('✅ Database pool connected');
 });
 
-pool.on('error', (err: Error) => {
-  console.error('❌ Unexpected database error:', err.message);
-  process.exit(-1);
-});
-
-// Test de connexion
-const testConnection = async (): Promise<void> => {
+export const connectDatabase = async (): Promise<void> => {
   try {
-    const result = await pool.query('SELECT NOW() as time');
-    console.log('✅ Database connection successful');
-    console.log('🕐 Server time:', result.rows[0].time);
-  } catch (err) {
-    const errorMessage = err instanceof Error ? err.message : 'Unknown database error';
-    console.error('❌ Database connection failed:', errorMessage);
-    process.exit(1);
+    // Test the connection
+    const client = await pool.connect();
+    console.log('✅ Connected to PostgreSQL database');
+    client.release();
+  } catch (error) {
+    console.error('❌ Database connection error:', error);
+    throw error;
   }
 };
 
-testConnection();
+export const disconnectDatabase = async (): Promise<void> => {
+  try {
+    await pool.end();
+    console.log('✅ Disconnected from database');
+  } catch (error) {
+    console.error('❌ Database disconnection error:', error);
+  }
+};
 
-export default pool;
+// Health check for database
+export const checkDatabaseHealth = async (): Promise<boolean> => {
+  try {
+    const result = await pool.query('SELECT 1');
+    return result.rows.length > 0;
+  } catch (error) {
+    console.error('❌ Database health check failed:', error);
+    return false;
+  }
+};
+
+// Query helper
+export const query = (text: string, params?: any[]) => pool.query(text, params);
